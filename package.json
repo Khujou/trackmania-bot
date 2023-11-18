@@ -1,0 +1,22 @@
+{
+    "name": "trackmania-bot",
+    "main": "app.js",
+    "type": "module",
+    "engines": {
+        "node": "16.x"
+    },
+    "scripts": {
+        "start": "node app.js",
+        "register": "node commands.js",
+        "dev": "nodemon app.js"
+    },
+    "dependencies": {
+        "discord-interactions": "^3.4.0",
+        "dotenv": "^16.3.1",
+        "express": "^4.18.2",
+        "node-fetch": "^3.3.2"
+    },
+    "devDependencies": {
+        "nodemon": "^3.0.1"
+    }
+}
