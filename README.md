@@ -2,7 +2,7 @@ Before anything, rename the .env.sample file provided to .env and enter in the i
 
 To install packages needed ->
 ```
-node 
+node install
 ```
 
 Once that's done, ->

@@ -8,7 +8,8 @@ import {
     ButtonStyleTypes,
     verifyKeyMiddleware,
 } from 'discord-interactions';
-import { DiscordRequest, TMRequest } from './utils.js';
+import { DiscordRequest } from './utils.js';
+import { trackmaniaCommands } from './trackmania.js';
 
 // Create an express app
 const app = express();
@@ -43,20 +44,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             });
         }
 
-        if (name === 'cotd') {
-            const access_token = (await TMRequest()).accessToken;
-            const cotd = await fetch('https://meet.trackmania.nadeo.club/api/cup-of-the-day/current', {
-                headers: {
-                    Authorization: `nadeo_v1 t=${access_token}`,
-                }
-            });
-
-            return res.send({
-                type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                data: {
-                    content: JSON.stringify(await cotd.json()),
-                },
-            });
+        try {
+            return trackmaniaCommands(req, res, data);
+        } catch (err) {
+            console.error(err);
         }
 
     }

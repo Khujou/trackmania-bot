@@ -7,9 +7,9 @@ const TEST_COMMAND = {
     type: 1,
 };
 
-const LEADERBOARD_COMMAND = {
-    name: 'leaderboard',
-    description: 'leaderboard',
+const TRACK_OF_THE_DAY_COMMAND = {
+    name: 'totd',
+    description: 'track of the day',
     type: 1,
 };
 
@@ -19,6 +19,10 @@ const CUP_OF_THE_DAY_COMMAND = {
     type: 1,
 };
 
-const ALL_COMMANDS = [TEST_COMMAND, LEADERBOARD_COMMAND, CUP_OF_THE_DAY_COMMAND];
+const ALL_COMMANDS = [
+    TEST_COMMAND, 
+    TRACK_OF_THE_DAY_COMMAND, 
+    CUP_OF_THE_DAY_COMMAND
+];
 
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);

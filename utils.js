@@ -34,27 +34,6 @@ export async function InstallGlobalCommands(appId, commands) {
     }
 }
 
-export async function TMRequest() {
-    const url = 'https://prod.trackmania.core.nadeo.online/v2/authentication/token/basic';
-    const login_password_base64 = Buffer.from(`${process.env.LOGIN}:${process.env.PASSWORD}`).toString('base64');
-
-    const res = await fetch (url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Basic ${login_password_base64}`,
-        },
-        body: JSON.stringify({
-            'audience' : 'NadeoClubServices',
-        }),
-        
-    });
-
-    if (!res.ok) {
-        const data = await res.json();
-        console.log(res.status);
-        throw new Error(JSON.stringify(data));
-    }
-
-    return res.json();
+export function beautifier() {
+    
 }
