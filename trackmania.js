@@ -6,13 +6,13 @@ import {
     InteractionResponseFlags,
     MessageComponentTypes,
     ButtonStyleTypes,
-    verifyKeyMiddleware,
 } from 'discord-interactions';
 
 class BaseService {
     constructor(url, audience) {
         this.url = url;
         this.audience = audience;
+
     }
 
     async getAccessToken() {
@@ -26,8 +26,6 @@ class BaseService {
             }
         });
 
-        console.log(res);
-
         if (!res.ok) {
             const data = await res.json();
             console.log(res.status);
@@ -40,11 +38,11 @@ class BaseService {
 
 class CoreService extends BaseService {
     constructor() {
-        super('https://prod.trackmania.core.nadeo.online/', 'NadeoServices');
+        super('https://prod.trackmania.core.nadeo.online', 'NadeoServices');
     }
 
-    async getMapInfo(mapUidList) {
-        return this.fetchEndpoint(`/maps/?mapUidList=${mapUidList}`);
+    async getMapInfo(mapIdList) {
+        return await this.fetchEndpoint(`/maps/?mapIdList=${mapIdList}`);
     }
 }
 
@@ -55,8 +53,12 @@ class LiveService extends BaseService {
 
     async trackOfTheDay(offset) {
         const totdMonth = await this.fetchEndpoint(`/api/token/campaign/month?length=1&offset=0`);
-        console.log(totdMonth.monthList[0].days);
-        return totdMonth;
+        //const currentTime = Math.round(Date.now() / 1000);
+        return totdMonth.monthList[0].days[18];
+    }
+
+    async getMapInfo(mapUid) {
+        return await this.fetchEndpoint(`/api/token/map/${mapUid}`);
     }
 }
 
@@ -66,8 +68,29 @@ class MeetService extends BaseService {
     }
 
     async cupOfTheDay() {
-        return this.fetchEndpoint('/api/cup-of-the-day/current');
+        return await this.fetchEndpoint('/api/cup-of-the-day/current');
     }
+}
+
+async function fetchAccountName(accountId) {
+    const url = `https://api.trackmania.com/api/display-names?accountId[]=${accountId}`;
+    const token = await fetch('https://api.trackmania.com/api/access_token', {
+        method: 'POST',
+        body: JSON.stringify({
+            'grant_type': 'client-credentials',
+            'client_id': `${process.env.CLIENT_ID}`,
+            'client_secret': `${process.env.CLIENT_SECRET}`,
+        }),
+    });
+
+    console.log(token);
+
+    const accountName = await fetch(url, {
+        headers: {
+            Authorization: `Bearer ${token}`,
+        },
+    });
+    return accountName;
 }
 
 export async function trackmaniaAuthRequest(audience) {
@@ -101,20 +124,42 @@ export async function trackmaniaCommands(req, res, data) {
     const meet_service = new MeetService();
     
     if (name === 'totd') {
+        /**
+         * Obtain track of the day information, then display the track name, 
+         * the track author, the track thumbnail, the times for the medals, 
+         * and the leaderboard.
+         */
+        const trackOfTheDay = await live_service.trackOfTheDay();
+        const mapInfo = await live_service.getMapInfo(trackOfTheDay.mapUid);
+        const authorName = await fetchAccountName(mapInfo.author);
+
+        //console.log(mapInfo);
+
         return res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: {
-                content: "```" + JSON.stringify(await live_service.trackOfTheDay(), null, 2) + "```",
+                content: "```" +
+                JSON.stringify(trackOfTheDay, null, 2) +
+                JSON.stringify(mapInfo, null, 2) +
+                JSON.stringify(authorName, null, 2) +
+                "```",
             },
         });
     }
 
     if (name === 'cotd') {
+        /**
+         * Obtain cup of the day information, then display the info regarding 
+         * what map it's played on, as well as the competition and challenges.
+         */
+        const cotdInfo = await meet_service.cupOfTheDay();
 
         return res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: {
-                content: "```" + JSON.stringify(await meet_service.cupOfTheDay(), null, 2) + "```",
+                content: "```" + 
+                JSON.stringify(cotdInfo, null, 2) + 
+                "```",
             },
         });
     }

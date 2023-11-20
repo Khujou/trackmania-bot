@@ -15,8 +15,6 @@ import { trackmaniaCommands } from './trackmania.js';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-console.log(process.env.PASSWORD);
-
 // Store for in-progress games. In production, you'd want to use a database
 const activeGames = {};
 
