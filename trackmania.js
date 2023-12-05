@@ -7,6 +7,7 @@ import {
     MessageComponentTypes,
     ButtonStyleTypes,
 } from 'discord-interactions';
+import { convertMillisecondsToFormattedTime } from './utils.js';
 
 class BaseService {
     constructor(url, audience) {
@@ -41,8 +42,18 @@ class CoreService extends BaseService {
         super('https://prod.trackmania.core.nadeo.online', 'NadeoServices');
     }
 
-    async getMapInfo(mapIdList) {
-        return await this.fetchEndpoint(`/maps/?mapIdList=${mapIdList}`);
+    async getMapInfo(mapIdList, mapUidList) {
+        let data;
+        if (mapIdList !== null) {
+            data = await this.fetchEndpoint(`/maps/?mapIdList=${mapIdList}`);
+        }
+        else if (mapUidList !== null) {
+            data = await this.fetchEndpoint(`/maps/?mapUidList=${mapUidList}`);
+        }
+        else {
+            throw new Error('No values given for map info');
+        }
+        return await data;
     }
 }
 
@@ -51,10 +62,17 @@ class LiveService extends BaseService {
         super('https://live-services.trackmania.nadeo.live', 'NadeoLiveServices');
     }
 
-    async trackOfTheDay(offset) {
-        const totdMonth = await this.fetchEndpoint(`/api/token/campaign/month?length=1&offset=0`);
-        //const currentTime = Math.round(Date.now() / 1000);
-        return totdMonth.monthList[0].days[18];
+    async trackOfTheDay() {
+        const tracks_of_the_month = (await this.fetchEndpoint(`/api/token/campaign/month?length=1&offset=0`)).monthList[0];
+
+        const currentTime = Math.round(Date.now() / 1000);
+        const currentDay = new Date().getDate();
+
+        if (tracks_of_the_month.days[currentDay-1]?.startTimestamp > currentTime) {
+            return tracks_of_the_month.days[currentDay - 2];
+        } else {
+            return tracks_of_the_month.days[currentDay - 1];
+        }
     }
 
     async getMapInfo(mapUid) {
@@ -72,28 +90,23 @@ class MeetService extends BaseService {
     }
 }
 
-async function fetchAccountName(accountId) {
-    const url = `https://api.trackmania.com/api/display-names?accountId[]=${accountId}`;
+async function fetchAccountName(account_id_list) {
     const token = await fetch('https://api.trackmania.com/api/access_token', {
         method: 'POST',
-        body: JSON.stringify({
-            'grant_type': 'client-credentials',
-            'client_id': `${process.env.CLIENT_ID}`,
-            'client_secret': `${process.env.CLIENT_SECRET}`,
-        }),
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: `grant_type=client_credentials&client_id=${process.env.CLIENT_ID}&client_secret=${process.env.CLIENT_SECRET}`
     });
 
-    console.log(token);
-
-    const accountName = await fetch(url, {
+    const account_name_list = await fetch(`https://api.trackmania.com/api/display-names?accountId[]=${account_id_list}`, {
         headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${(await token.json()).access_token}`,
         },
     });
-    return accountName;
+
+    return (await account_name_list.json())[account_id_list];
 }
 
-export async function trackmaniaAuthRequest(audience) {
+async function trackmaniaAuthRequest(audience) {
     const url = 'https://prod.trackmania.core.nadeo.online/v2/authentication/token/basic';
     const login_password_base64 = Buffer.from(`${process.env.LOGIN}:${process.env.PASSWORD}`).toString('base64');
 
@@ -129,19 +142,23 @@ export async function trackmaniaCommands(req, res, data) {
          * the track author, the track thumbnail, the times for the medals, 
          * and the leaderboard.
          */
-        const trackOfTheDay = await live_service.trackOfTheDay();
-        const mapInfo = await live_service.getMapInfo(trackOfTheDay.mapUid);
-        const authorName = await fetchAccountName(mapInfo.author);
+        const track_of_the_day = await live_service.trackOfTheDay();
+        const map_info = (await core_service.getMapInfo(null, track_of_the_day.mapUid))[0];
+        const author_name = await fetchAccountName(map_info.author);
 
-        //console.log(mapInfo);
+        const outputString = 'Map: ' + JSON.stringify(map_info.name, null, 2) +
+            '\nAuthor: ' + JSON.stringify(author_name, null, 2) +
+            '\n' + JSON.stringify(map_info.thumbnailUrl, null, 2) +
+            '\nAuthor Time: ' + JSON.stringify(convertMillisecondsToFormattedTime(map_info.authorScore), null, 2) +
+            '\nGold Time: ' + JSON.stringify(convertMillisecondsToFormattedTime(map_info.goldScore), null, 2) +
+            '\nSilver Time: ' + JSON.stringify(convertMillisecondsToFormattedTime(map_info.silverScore), null, 2) +
+            '\nBronze Time: ' + JSON.stringify(convertMillisecondsToFormattedTime(map_info.bronzeScore), null, 2);
 
         return res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: {
                 content: "```" +
-                JSON.stringify(trackOfTheDay, null, 2) +
-                JSON.stringify(mapInfo, null, 2) +
-                JSON.stringify(authorName, null, 2) +
+                outputString + 
                 "```",
             },
         });
@@ -152,13 +169,13 @@ export async function trackmaniaCommands(req, res, data) {
          * Obtain cup of the day information, then display the info regarding 
          * what map it's played on, as well as the competition and challenges.
          */
-        const cotdInfo = await meet_service.cupOfTheDay();
+        const cotd_info = await meet_service.cupOfTheDay();
 
         return res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: {
                 content: "```" + 
-                JSON.stringify(cotdInfo, null, 2) + 
+                JSON.stringify(cotd_info, null, 2) + 
                 "```",
             },
         });
