@@ -72,29 +72,19 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
              * the style of the track (using trackmania.exchange), and the leaderboard.
              */
             const track_of_the_day = await live_service.trackOfTheDay();
-            const map_info = (await core_service.getMapInfo(null, track_of_the_day.mapUid))[0];
-            const author_name = await trackmania.fetchAccountName(map_info.author);
+            const nadeo_map_info = (await core_service.getMapInfo(null, track_of_the_day.mapUid))[0];
+            //const author_name = await trackmania.fetchAccountName(nadeo_map_info.author);
+            const mx_map_info = await trackmania.fetchManiaExchange(`/api/maps/get_map_info/uid/${track_of_the_day.mapUid}`);
     
-            const medalTimes = `:medal: Author Time: \t ${convertMS(map_info.authorScore)}` +
-                `\n:first_place: Gold Time: \t ${convertMS(map_info.goldScore)}` +
-                `\n:second_place: Silver Time: \t ${convertMS(map_info.silverScore)}` +
-                `\n:third_place: Bronze Time: \t ${convertMS(map_info.bronzeScore)}`;
+            const medalTimes = `:medal: Author Time: \t ${convertMS(nadeo_map_info.authorScore)}` +
+                `\n:first_place: Gold Time: \t ${convertMS(nadeo_map_info.goldScore)}` +
+                `\n:second_place: Silver Time: \t ${convertMS(nadeo_map_info.silverScore)}` +
+                `\n:third_place: Bronze Time: \t ${convertMS(nadeo_map_info.bronzeScore)}`;
 
-            let map_name = map_info.name;
-            let temp = ''; let ignoreCnt = 0;
-            for (const char of map_name) {
-                if (ignoreCnt > 0) {
-                    ignoreCnt--;
-                    continue;
-                }
-                if (char === '$') {
-                    ignoreCnt = 3;
-                    continue;
-                }
-                temp += char;
+            let map_tags = mx_map_info.Tags.split(',');
+            for (let i = 0; i < map_tags.length; i++) {
+                map_tags[i] = trackmania.map_tags[parseInt(map_tags[i]) - 1].Name;
             };
-
-            map_name = temp;
 
             return res.send({
                 type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -104,19 +94,30 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                         color: 69420,
                         fields: [{
                             name: 'Map',
-                            value: map_name,
+                            value: mx_map_info.Name,
+                            inline: true,
+                        },{
+                            name: 'Difficulty',
+                            value: mx_map_info.DifficultyName,
+                            inline: true,
                         },{
                             name: 'Author',
-                            value: author_name,
+                            value: mx_map_info.Username,
                         },{
                             name: 'Medal Times',
                             value: medalTimes,
-                        },],
+                            inline: true,
+                        },{
+                            name: 'Map Tags',
+                            value: JSON.stringify(map_tags),
+                            inline: true,
+                        },
+                        ],
                         image: {
-                            url: map_info.thumbnailUrl,
+                            url: nadeo_map_info.thumbnailUrl,
                             height: 100,
                             width: 100,
-                        }
+                        },
                     },],
                 },
             });
