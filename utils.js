@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import fetch from 'node-fetch';
-import { verifyKey } from 'discord-interactions';
 
 export async function DiscordRequest(endpoint, options) {
     const url = 'https://discord.com/api/v10/' + endpoint;
@@ -34,10 +33,20 @@ export async function InstallGlobalCommands(appId, commands) {
     }
 }
 
+export async function InstallGuildCommands(appId, guild_id, commands) {
+    const endpoint = `applications/${appId}/guilds/${guild_id}/commands`;
+
+    try {
+        await DiscordRequest(endpoint, {method: 'PUT', body: commands});
+    } catch (err) {
+        console.error(err);
+    }
+}
+
 export function convertMillisecondsToFormattedTime(milliseconds) {
     const ms = milliseconds % 1000;
     const seconds = Math.floor((milliseconds / 1000) %  60);
-    const minutes = Math.floor((milliseconds / 1000 / 60) % 60);
+    const minutes = Math.floor((milliseconds / 1000 / 60));
     //const hours = Math.floor((milliseconds / 1000 / 60 / 60) % 24);
 
     const formattedTime = [

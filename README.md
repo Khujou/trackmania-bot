@@ -12,7 +12,7 @@ npm run register
 
 To run the bot, I personally use ngrok to tunnel HTTP traffic. Install [`ngrok`](https://ngrok.com/) and have it start listening to port 3000 ->
 ```
-ngrok http 3000
+ngrok.exe http 3000
 ```
 
 Once you've done all that, you can ->

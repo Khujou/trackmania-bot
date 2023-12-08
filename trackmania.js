@@ -1,13 +1,5 @@
 import 'dotenv/config';
 import fetch from 'node-fetch';
-import {
-    InteractionType,
-    InteractionResponseType,
-    InteractionResponseFlags,
-    MessageComponentTypes,
-    ButtonStyleTypes,
-} from 'discord-interactions';
-import { convertMillisecondsToFormattedTime } from './utils.js';
 
 class BaseService {
     constructor(url, audience) {
@@ -37,7 +29,7 @@ class BaseService {
     }
 }
 
-class CoreService extends BaseService {
+export class CoreService extends BaseService {
     constructor() {
         super('https://prod.trackmania.core.nadeo.online', 'NadeoServices');
     }
@@ -57,7 +49,7 @@ class CoreService extends BaseService {
     }
 }
 
-class LiveService extends BaseService {
+export class LiveService extends BaseService {
     constructor() {
         super('https://live-services.trackmania.nadeo.live', 'NadeoLiveServices');
     }
@@ -80,7 +72,7 @@ class LiveService extends BaseService {
     }
 }
 
-class MeetService extends BaseService {
+export class MeetService extends BaseService {
     constructor() {
         super('https://meet.trackmania.nadeo.club', 'NadeoClubServices');
     }
@@ -90,7 +82,7 @@ class MeetService extends BaseService {
     }
 }
 
-async function fetchAccountName(account_id_list) {
+export async function fetchAccountName(account_id_list) {
     const token = await fetch('https://api.trackmania.com/api/access_token', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -128,57 +120,4 @@ async function trackmaniaAuthRequest(audience) {
     }
 
     return res.json();
-}
-
-export async function trackmaniaCommands(req, res, data) {
-    const { name } = data;
-    const core_service = new CoreService();
-    const live_service = new LiveService();
-    const meet_service = new MeetService();
-    
-    if (name === 'totd') {
-        /**
-         * Obtain track of the day information, then display the track name, 
-         * the track author, the track thumbnail, the times for the medals, 
-         * and the leaderboard.
-         */
-        const track_of_the_day = await live_service.trackOfTheDay();
-        const map_info = (await core_service.getMapInfo(null, track_of_the_day.mapUid))[0];
-        const author_name = await fetchAccountName(map_info.author);
-
-        const outputString = 'Map: ' + JSON.stringify(map_info.name, null, 2) +
-            '\nAuthor: ' + JSON.stringify(author_name, null, 2) +
-            '\n' + JSON.stringify(map_info.thumbnailUrl, null, 2) +
-            '\nAuthor Time: ' + JSON.stringify(convertMillisecondsToFormattedTime(map_info.authorScore), null, 2) +
-            '\nGold Time: ' + JSON.stringify(convertMillisecondsToFormattedTime(map_info.goldScore), null, 2) +
-            '\nSilver Time: ' + JSON.stringify(convertMillisecondsToFormattedTime(map_info.silverScore), null, 2) +
-            '\nBronze Time: ' + JSON.stringify(convertMillisecondsToFormattedTime(map_info.bronzeScore), null, 2);
-
-        return res.send({
-            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: {
-                content: "```" +
-                outputString + 
-                "```",
-            },
-        });
-    }
-
-    if (name === 'cotd') {
-        /**
-         * Obtain cup of the day information, then display the info regarding 
-         * what map it's played on, as well as the competition and challenges.
-         */
-        const cotd_info = await meet_service.cupOfTheDay();
-
-        return res.send({
-            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: {
-                content: "```" + 
-                JSON.stringify(cotd_info, null, 2) + 
-                "```",
-            },
-        });
-    }
-
 }
