@@ -1,7 +1,15 @@
+import { 
+    InteractionType,
+    InteractionResponseType,
+    InteractionResponseFlags,
+    MessageComponentTypes,
+    ButtonStyleTypes 
+} from 'discord-interactions';
 import 'dotenv/config';
 import fetch from 'node-fetch';
+import { convertMillisecondsToFormattedTime as convertMS } from './utils.js';
 
-// JSON of all trackmania map map tags
+// JSON of all trackmania.exchange map tags
 export const map_tags = [
     { ID: 1, Name: 'Race', Color: '' },
     { ID: 2, Name: 'FullSpeed', Color: '' },
@@ -153,7 +161,7 @@ export async function fetchAccountName(account_id_list) {
     return (await account_name_list.json())[account_id_list];
 }
 
-export async function fetchManiaExchange(endpoint) {
+async function fetchManiaExchange(endpoint) {
     const url = 'https://trackmania.exchange';
     const res = await fetch(url + endpoint, {
         headers: {
@@ -192,4 +200,148 @@ async function trackmaniaAuthRequest(audience) {
     }
 
     return res.json();
+}
+
+export async function trackOfTheDay(core_service, live_service) {
+    /**
+     * Obtain track of the day information, then display the track name, 
+     * the track author, the track thumbnail, the times for the medals,
+     * the style of the track (using trackmania.exchange), and the leaderboard.
+     * 
+     * TEMPORARY FILE to CACHE totd data for the day once requested
+     */
+    const track_of_the_day = await live_service.trackOfTheDay();
+    const nadeo_map_info = (await core_service.getMapInfo(null, track_of_the_day.mapUid))[0];
+    const mx_map_info = await fetchManiaExchange(`/api/maps/get_map_info/uid/${track_of_the_day.mapUid}`);
+
+    const medal_times = `:medal: Author Time: \t ${convertMS(nadeo_map_info.authorScore)}` +
+        `\n:first_place: Gold Time: \t ${convertMS(nadeo_map_info.goldScore)}` +
+        `\n:second_place: Silver Time: \t ${convertMS(nadeo_map_info.silverScore)}` +
+        `\n:third_place: Bronze Time: \t ${convertMS(nadeo_map_info.bronzeScore)}`;
+
+    let tags = mx_map_info.Tags.split(',');
+    for (let i = 0; i < tags.length; i++) {
+        tags[i] = map_tags[parseInt(tags[i]) - 1].Name;
+    };
+
+    const res = {
+        embeds: [{
+            title: 'Track of the Day',
+            color: 69420,
+            fields: [{
+                name: 'Map',
+                value: mx_map_info.Name,
+                inline: true,
+            },{
+                name: 'Difficulty',
+                value: mx_map_info.DifficultyName,
+                inline: true,
+            },{
+                name: 'Author',
+                value: mx_map_info.Username,
+            },{
+                name: 'Medal Times',
+                value: medal_times,
+                inline: true,
+            },{
+                name: 'Map Tags',
+                value: JSON.stringify(tags),
+                inline: true,
+            },
+            ],
+            image: {
+                url: nadeo_map_info.thumbnailUrl,
+                height: 100,
+                width: 100,
+            },
+        },],
+        components: [{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [{
+                type: MessageComponentTypes.BUTTON,
+                style: ButtonStyleTypes.PRIMARY,
+                label: 'Cup of the Day',
+                custom_id: `cotd_button`,
+                emoji: {
+                    id: null,
+                    name: '🏆',
+                },
+            },{
+                type: MessageComponentTypes.BUTTON,
+                style: ButtonStyleTypes.PRIMARY,
+                label: 'Leaderboard',
+                custom_id: 'a',
+                emoji: {
+                    id: null,
+                    name: '📋',
+                },
+            },],
+        },],
+    }
+
+    return res;
+}
+
+export async function cupOfTheDay(meet_service, flags = null) {
+    /**
+     * Obtain cup of the day information, then display the info regarding 
+     * what map it's played on, as well as the competition and challenges.
+     */
+
+    const cotd_info = await meet_service.cupOfTheDay();
+
+    const res = {
+        flags: flags,
+        embeds: [{
+            title: 'Cing of the Dill',
+            color: 83724,
+            fields: [{
+                name: 'info',
+                value: JSON.stringify(cotd_info.competition, null, 2),
+            },{
+                name: 'info2',
+                value: JSON.stringify(cotd_info.challenge, null, 2),
+            },
+            ],
+        },],
+        components: [{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [{
+                type: MessageComponentTypes.BUTTON,
+                style: ButtonStyleTypes.PRIMARY,
+                label: 'Track of the Day',
+                custom_id: 'totd_button',
+                emoji: {
+                    id: null,
+                    name: '🏎️',
+                }
+            },],
+        },],
+    }
+
+    return res;
+}
+
+export async function leaderboard() {
+    const prev_button = {
+        type: MessageComponentTypes.BUTTON,
+        style: ButtonStyleTypes.PRIMARY,
+        label: 'Back',
+        custom_id: 'back_button',
+        emoji: {
+            id: null,
+            name: '⬅️',
+        },
+    };
+
+    const next_button = {
+        type: MessageComponentTypes.BUTTON,
+        style: ButtonStyleTypes.PRIMARY,
+        label: 'Next',
+        custom_id: 'next_button',
+        emoji: {
+            id: null,
+            name: '➡️',
+        },
+    };
 }

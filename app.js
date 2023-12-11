@@ -8,8 +8,8 @@ import {
     ButtonStyleTypes,
     verifyKeyMiddleware,
 } from 'discord-interactions';
-import { convertMillisecondsToFormattedTime as convertMS } from './utils.js';
 import * as trackmania from './trackmania.js';
+import { DiscordRequest } from './utils.js';
 
 // Create an express app
 const app = express();
@@ -18,7 +18,10 @@ const PORT = process.env.PORT || 3000;
 // Interactions endpoint URL where Discord will send HTTP requests
 app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (req, res) => {
     // Interaction type and data
-    const { type, id, data } = req.body;
+    const { type, id, data, token, message } = req.body;
+    const core_service = new trackmania.CoreService();
+    const live_service = new trackmania.LiveService();
+    const meet_service = new trackmania.MeetService();
 
     // Handle verification requests
     if (type === InteractionResponseType.PING) {
@@ -28,15 +31,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
     // Handle slash command requests
     if (type === InteractionType.APPLICATION_COMMAND) {
         const { name } = data;
-        const core_service = new trackmania.CoreService();
-        const live_service = new trackmania.LiveService();
-        const meet_service = new trackmania.MeetService();
+        const endpoint = `webhooks/${process.env.APP_ID}/${token}/messages/@original`;
 
-        // "test" command
         if (name === 'test') {
-            return res.send({
-                type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                data: {
+            res.send({
+                type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+            })
+            await DiscordRequest(endpoint, {
+                method: 'PATCH',
+                body: {
                     content: 'hello world',
                     embeds: [{
                         title: 'hello world',
@@ -61,85 +64,66 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                             icon_url: 'https://media.discordapp.net/attachments/501929280729513994/1154607848437858374/image.png?ex=657bbc5a&is=6569475a&hm=1a8904ebb68181710d0d9808f20516b2f1f35ce1b09706af3e89a18915ca9f54&=&format=webp&quality=lossless',
                         },
                     },],
-                },
-            });
-        }
-
-        if (name === 'totd') {
-            /**
-             * Obtain track of the day information, then display the track name, 
-             * the track author, the track thumbnail, the times for the medals,
-             * the style of the track (using trackmania.exchange), and the leaderboard.
-             */
-            const track_of_the_day = await live_service.trackOfTheDay();
-            const nadeo_map_info = (await core_service.getMapInfo(null, track_of_the_day.mapUid))[0];
-            //const author_name = await trackmania.fetchAccountName(nadeo_map_info.author);
-            const mx_map_info = await trackmania.fetchManiaExchange(`/api/maps/get_map_info/uid/${track_of_the_day.mapUid}`);
-    
-            const medalTimes = `:medal: Author Time: \t ${convertMS(nadeo_map_info.authorScore)}` +
-                `\n:first_place: Gold Time: \t ${convertMS(nadeo_map_info.goldScore)}` +
-                `\n:second_place: Silver Time: \t ${convertMS(nadeo_map_info.silverScore)}` +
-                `\n:third_place: Bronze Time: \t ${convertMS(nadeo_map_info.bronzeScore)}`;
-
-            let map_tags = mx_map_info.Tags.split(',');
-            for (let i = 0; i < map_tags.length; i++) {
-                map_tags[i] = trackmania.map_tags[parseInt(map_tags[i]) - 1].Name;
-            };
-
-            return res.send({
-                type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                data: {
-                    embeds: [{
-                        title: 'Track of the Day',
-                        color: 69420,
-                        fields: [{
-                            name: 'Map',
-                            value: mx_map_info.Name,
-                            inline: true,
+                    components: [{
+                        type: MessageComponentTypes.ACTION_ROW,
+                        components: [{
+                            type: MessageComponentTypes.BUTTON,
+                            url: 'https://raw.githubusercontent.com/2qar/bigheadgeorge.github.io/master/ogdog.gif',
+                            label: 'Click for win',
+                            style: 5,
                         },{
-                            name: 'Difficulty',
-                            value: mx_map_info.DifficultyName,
-                            inline: true,
-                        },{
-                            name: 'Author',
-                            value: mx_map_info.Username,
-                        },{
-                            name: 'Medal Times',
-                            value: medalTimes,
-                            inline: true,
-                        },{
-                            name: 'Map Tags',
-                            value: JSON.stringify(map_tags),
-                            inline: true,
+                            type: MessageComponentTypes.BUTTON,
+                            url: 'https://media.tenor.com/FDxMOf3iWhIAAAAM/angry-cute-cat-cat.gif',
+                            label: 'Click for lose',
+                            style: 5,
                         },
                         ],
-                        image: {
-                            url: nadeo_map_info.thumbnailUrl,
-                            height: 100,
-                            width: 100,
-                        },
-                    },],
-                },
+                    },
+                    ],
+                }
+            })
+        } else if (name === 'totd') {
+            res.send({
+                type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
             });
-        }
-    
-        if (name === 'cotd') {
-            /**
-             * Obtain cup of the day information, then display the info regarding 
-             * what map it's played on, as well as the competition and challenges.
-             */
-            const cotd_info = await meet_service.cupOfTheDay();
-    
-            return res.send({
-                type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                data: {
-                    content: "```" + 
-                    JSON.stringify(cotd_info, null, 2) + 
-                    "```",
-                },
+            await DiscordRequest(endpoint, {
+                method: 'PATCH',
+                body: await trackmania.trackOfTheDay(core_service, live_service)
             });
-        }
+        } 
+        // else if (name === 'cotd') {
+        //     return res.send(await trackmania.cupOfTheDay(meet_service));
+        // }
 
+    }
+    if (type === InteractionType.MESSAGE_COMPONENT) {
+        const componentId = data.custom_id;
+
+        if (componentId === 'cotd_button') {
+
+            const endpoint = `webhooks/${process.env.APP_ID}/${token}/messages/${message.id}`;
+
+            try {
+                await DiscordRequest(endpoint, { 
+                    method: 'PATCH',
+                    body: await trackmania.cupOfTheDay(meet_service)
+                });
+            } catch (err) {
+                console.error('Error sending message:', err);
+            }
+        } else if (componentId === 'totd_button') {
+            const endpoint = `channels/${req.body.channel_id}/messages/${message.id}`;
+
+            try {
+                await DiscordRequest(endpoint, { method: 'DELETE' });
+                return res.send({
+                    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                    data: await trackmania.trackOfTheDay(core_service, live_service),
+                })
+            } catch (err) {
+                console.error('Error sending message:', err);
+            }
+        }
     }
 });
 
