@@ -225,6 +225,15 @@ async function nadeoAuthentication(audience) {
     return res.json();
 }
 
+/**
+ * 
+ * @param {string} title 
+ * @param {CoreService} core_service 
+ * @param {string} groupUid 
+ * @param {string} mapUid 
+ * @param {InteractionResponseFlags} flags 
+ * @returns 
+ */
 export async function embedTrackInfo(title, core_service, groupUid, mapUid, flags = null) {
     const nadeo_map_info = (await core_service.getMapInfo(null, mapUid))[0];
 
@@ -343,7 +352,7 @@ export async function trackOfTheDay(core_service, live_service, flags = null) {
     const totd = await live_service.trackOfTheDay();
     console.log(totd);
     const title = `Track of the Day - ${day[totd.day]} ${totd.monthDay}`;
-    let res = await embedTrackInfo(title, core_service, totd, groupUid, totd.mapUid, flags);
+    let res = await embedTrackInfo(title, core_service, totd.seasonUid, totd.mapUid, flags);
     res['components'][0]['components'].unshift({
         type: MessageComponentTypes.BUTTON,
         style: ButtonStyleTypes.DANGER,

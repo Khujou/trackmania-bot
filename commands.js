@@ -11,6 +11,15 @@ const SEARCH_MAP = {
     name: 'search',
     description: 'give filters to search for map on trackmania.exchange',
     type: 1,
+    options: [{
+        name: '',
+        description: '',
+        type: 3,
+    },{
+        name: '',
+        description: '',
+        type: 3,
+    }],
 };
 
 const TRACK_OF_THE_DAY_COMMAND = {
@@ -18,11 +27,11 @@ const TRACK_OF_THE_DAY_COMMAND = {
     description: 'track of the day',
     type: 1,
     options: [{
-        'name': 'month',
-        'description': 'number of months ago that you want the month of the totds, goes up to 12 months ago',
-        'type': 4,
-        'min-value': 0,
-        'max-value': 12,
+        name: 'month',
+        description: 'number of months ago that you want the month of the totds, goes up to 12 months ago',
+        type: 4,
+        min_value: 0,
+        max_value: 12,
     }],
 };
 
