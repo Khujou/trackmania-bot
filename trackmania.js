@@ -7,6 +7,9 @@ import {
 } from 'discord-interactions';
 import 'dotenv/config';
 import fetch from 'node-fetch';
+import * as NodeCache from 'node-cache';
+import * as schedule from 'node-schedule';
+import * as fs from 'node:fs';
 import { convertMillisecondsToFormattedTime as convertMS } from './utils.js';
 
 // JSON of all trackmania.exchange map tags
@@ -64,6 +67,13 @@ export const map_tags = [
     { ID: 51, Name: 'Wood', Color: '814b00' }
 ];
 
+const day = ['Mon.', 'Tue.', 'Wed.', 'Thur.', 'Fri.', 'Sat.', 'Sun.'];
+
+let currentDay = new Date().getDate();
+const changeDay = schedule.scheduleJob('0 0 * * *', () => {
+    currentDay = new Date().getDate();
+});
+
 class BaseService {
     constructor(url, audience) {
         this.url = url;
@@ -72,13 +82,27 @@ class BaseService {
     }
 
     async getAccessToken() {
-       return (await trackmaniaAuthRequest(this.audience)).accessToken;
+        // if (JSON.parse(fs.readFile('data', (err, data) => {
+        //     if (err) throw err
+        //         console.log(err);
+        // })).expirationTime < Math.round(Date.now() / 1000)) {
+        //     //refresh token
+        // } else {
+        const at = await nadeoAuthentication(this.audience);
+        const unencoded_at = JSON.parse(atob(at.accessToken.split('.')[1]));
+        const res = {'accessToken': at.accessToken,
+            'refreshToken': at.refreshToken,
+            'refreshTime': unencoded_at.rat,
+            'expirationTime': unencoded_at.exp};
+        // }
+
+        return res;
     }
 
     async fetchEndpoint(endpoint) {
         const res = await fetch(this.url + endpoint, {
             headers: {
-                Authorization: `nadeo_v1 t=${await this.getAccessToken()}`,
+                Authorization: `nadeo_v1 t=${await this.getAccessToken().then(response => response.accessToken)}`,
             }
         });
 
@@ -108,7 +132,7 @@ export class CoreService extends BaseService {
         else {
             throw new Error('No values given for map info');
         }
-        return await data;
+        return data;
     }
 }
 
@@ -117,21 +141,13 @@ export class LiveService extends BaseService {
         super('https://live-services.trackmania.nadeo.live', 'NadeoLiveServices');
     }
 
-    async trackOfTheDay() {
-        const tracks_of_the_month = (await this.fetchEndpoint(`/api/token/campaign/month?length=1&offset=0`)).monthList[0];
-
-        const currentTime = Math.round(Date.now() / 1000);
-        const currentDay = new Date().getDate();
-
-        if (tracks_of_the_month.days[currentDay-1]?.startTimestamp > currentTime) {
-            return tracks_of_the_month.days[currentDay - 2];
+    async trackOfTheDay(offset = 0, day = currentDay - 1) {
+        const tracks_of_the_month = (await this.fetchEndpoint(`/api/token/campaign/month?length=1&offset=${offset}`)).monthList[0];
+        if (tracks_of_the_month.days[day]?.relativeStart > 0) {
+            return tracks_of_the_month.days[day - 1];
         } else {
-            return tracks_of_the_month.days[currentDay - 1];
+            return tracks_of_the_month.days[day];
         }
-    }
-
-    async getMapInfo(mapUid) {
-        return await this.fetchEndpoint(`/api/token/map/${mapUid}`);
     }
 }
 
@@ -139,26 +155,33 @@ export class MeetService extends BaseService {
     constructor() {
         super('https://meet.trackmania.nadeo.club', 'NadeoClubServices');
     }
-
-    async cupOfTheDay() {
-        return await this.fetchEndpoint('/api/cup-of-the-day/current');
-    }
 }
 
-export async function fetchAccountName(account_id_list) {
+async function fetchAccountName(account_id_list) {
     const token = await fetch('https://api.trackmania.com/api/access_token', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: `grant_type=client_credentials&client_id=${process.env.CLIENT_ID}&client_secret=${process.env.CLIENT_SECRET}`
+        body: `grant_type=client_credentials&client_id=${process.env.TM_OAUTH2_CLIENT_ID}&client_secret=${process.env.TM_OAUTH2_CLIENT_SECRET}`
     });
 
-    const account_name_list = await fetch(`https://api.trackmania.com/api/display-names?accountId[]=${account_id_list}`, {
+    let endpoint = `https://api.trackmania.com/api/display-names`; let tmp = true;
+    account_id_list.forEach((account_id) => {
+        if (tmp === false) {
+            endpoint += '&';
+        } else {
+            endpoint += '?'
+            tmp = false;
+        }
+        endpoint += `accountId[]=${account_id}`
+    });
+
+    const account_name_list = await fetch(endpoint, {
         headers: {
             Authorization: `Bearer ${(await token.json()).access_token}`,
         },
     });
 
-    return (await account_name_list.json())[account_id_list];
+    return await account_name_list.json();
 }
 
 async function fetchManiaExchange(endpoint) {
@@ -178,9 +201,9 @@ async function fetchManiaExchange(endpoint) {
     return res.json();
 }
 
-async function trackmaniaAuthRequest(audience) {
+async function nadeoAuthentication(audience) {
     const url = 'https://prod.trackmania.core.nadeo.online/v2/authentication/token/basic';
-    const login_password_base64 = Buffer.from(`${process.env.LOGIN}:${process.env.PASSWORD}`).toString('base64');
+    const login_password_base64 = btoa(Buffer.from(`${process.env.TM_SERVER_ACC_LOGIN}:${process.env.TM_SERVER_ACC_PASSWORD}`));
 
     const res = await fetch (url, {
         method: 'POST',
@@ -202,55 +225,78 @@ async function trackmaniaAuthRequest(audience) {
     return res.json();
 }
 
-export async function trackOfTheDay(core_service, live_service) {
-    /**
-     * Obtain track of the day information, then display the track name, 
-     * the track author, the track thumbnail, the times for the medals,
-     * the style of the track (using trackmania.exchange), and the leaderboard.
-     * 
-     * TEMPORARY FILE to CACHE totd data for the day once requested
-     */
-    const track_of_the_day = await live_service.trackOfTheDay();
-    const nadeo_map_info = (await core_service.getMapInfo(null, track_of_the_day.mapUid))[0];
-    const mx_map_info = await fetchManiaExchange(`/api/maps/get_map_info/uid/${track_of_the_day.mapUid}`);
+export async function embedTrackInfo(title, core_service, groupUid, mapUid, flags = null) {
+    const nadeo_map_info = (await core_service.getMapInfo(null, mapUid))[0];
 
-    const medal_times = `:medal: Author Time: \t ${convertMS(nadeo_map_info.authorScore)}` +
-        `\n:first_place: Gold Time: \t ${convertMS(nadeo_map_info.goldScore)}` +
-        `\n:second_place: Silver Time: \t ${convertMS(nadeo_map_info.silverScore)}` +
-        `\n:third_place: Bronze Time: \t ${convertMS(nadeo_map_info.bronzeScore)}`;
+    let map = {
+        'Name': nadeo_map_info.filename.slice(0,-8),
+        'Username': null,
+        'Difficulty': null,
+        'AuthorTime': convertMS(nadeo_map_info.authorScore),
+        'GoldTime': convertMS(nadeo_map_info.goldScore),
+        'SilverTime': convertMS(nadeo_map_info.silverScore),
+        'BronzeTime': convertMS(nadeo_map_info.bronzeScore),
+        'Tags': null,
+        'StyleName': null,
+        'Thumbnail': nadeo_map_info.thumbnailUrl,
+    }
 
-    let tags = mx_map_info.Tags.split(',');
-    for (let i = 0; i < tags.length; i++) {
-        tags[i] = map_tags[parseInt(tags[i]) - 1].Name;
-    };
+    let mx_map_info;
+    try {
+        mx_map_info = await fetchManiaExchange(`/api/maps/get_map_info/uid/${mapUid}`);
+        map.Username = mx_map_info.Username;
+        map.Difficulty = mx_map_info.DifficultyName;
+        map.Tags = mx_map_info.Tags;
+        map.StyleName = mx_map_info.StyleName,
+        map.Website = `https://trackmania.exchange/s/tr/${mx_map_info.TrackID}`
+    } catch (err) {
+        console.error('Couldn\'t retrieve data from trackmania.exchange:', err);
+        mainModule.Username = fetchAccountName([nadeo_map_info.author])[nadeo_map_info.author];
+    }
+
+    const medal_times = 
+        `:medal: ${map.AuthorTime}\n` +
+        `:first_place: ${map.GoldTime}\n` +
+        `:second_place: ${map.SilverTime}\n` +
+        `:third_place: ${map.BronzeTime}\n`;
+
+    let tags_str = '';
+    if (map.Tags !== 'not available') {
+        const tags = map.Tags.split(',');
+        for (let i = 0; i < tags.length; i++) {
+            tags_str += map_tags[parseInt(tags[i]) - 1]?.Name;
+            tags_str += '\n';
+        };
+    } else {tags_str = map.Tags}
 
     const res = {
+        flags: flags,
         embeds: [{
-            title: 'Track of the Day',
-            color: 69420,
+            title: title,
+            color: map.StyleName,
             fields: [{
                 name: 'Map',
-                value: mx_map_info.Name,
+                value: map.Name,
                 inline: true,
             },{
                 name: 'Difficulty',
-                value: mx_map_info.DifficultyName,
+                value: map.Difficulty,
                 inline: true,
             },{
                 name: 'Author',
-                value: mx_map_info.Username,
+                value: map.Username,
             },{
                 name: 'Medal Times',
                 value: medal_times,
                 inline: true,
             },{
                 name: 'Map Tags',
-                value: JSON.stringify(tags),
+                value: tags_str,
                 inline: true,
             },
             ],
             image: {
-                url: nadeo_map_info.thumbnailUrl,
+                url: map.Thumbnail,
                 height: 100,
                 width: 100,
             },
@@ -260,17 +306,8 @@ export async function trackOfTheDay(core_service, live_service) {
             components: [{
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.PRIMARY,
-                label: 'Cup of the Day',
-                custom_id: `cotd_button`,
-                emoji: {
-                    id: null,
-                    name: '🏆',
-                },
-            },{
-                type: MessageComponentTypes.BUTTON,
-                style: ButtonStyleTypes.PRIMARY,
                 label: 'Leaderboard',
-                custom_id: 'a',
+                custom_id: `map_leaderboard_${groupUid}_${mapUid}`,
                 emoji: {
                     id: null,
                     name: '📋',
@@ -279,46 +316,44 @@ export async function trackOfTheDay(core_service, live_service) {
         },],
     }
 
+    if (map.Website !== null) {
+        res['components'][0]['components'].push({
+            type: MessageComponentTypes.BUTTON,
+            style: ButtonStyleTypes.LINK,
+            label: 'Map on TMX',
+            url: map.Website,
+            emoji: {
+                id: null,
+                name: '💻',
+            },
+        });
+    }
+
     return res;
 }
 
-export async function cupOfTheDay(meet_service, flags = null) {
+export async function trackOfTheDay(core_service, live_service, flags = null) {
     /**
-     * Obtain cup of the day information, then display the info regarding 
-     * what map it's played on, as well as the competition and challenges.
+     * Obtain track of the day information, then display the track name, 
+     * the track author, the track thumbnail, the times for the medals,
+     * the style of the track (using trackmania.exchange), and the leaderboard.
+     * 
+     * TEMPORARY FILE to CACHE totd data for the day once requested
      */
-
-    const cotd_info = await meet_service.cupOfTheDay();
-
-    const res = {
-        flags: flags,
-        embeds: [{
-            title: 'Cing of the Dill',
-            color: 83724,
-            fields: [{
-                name: 'info',
-                value: JSON.stringify(cotd_info.competition, null, 2),
-            },{
-                name: 'info2',
-                value: JSON.stringify(cotd_info.challenge, null, 2),
-            },
-            ],
-        },],
-        components: [{
-            type: MessageComponentTypes.ACTION_ROW,
-            components: [{
-                type: MessageComponentTypes.BUTTON,
-                style: ButtonStyleTypes.PRIMARY,
-                label: 'Track of the Day',
-                custom_id: 'totd_button',
-                emoji: {
-                    id: null,
-                    name: '🏎️',
-                }
-            },],
-        },],
-    }
-
+    const totd = await live_service.trackOfTheDay();
+    console.log(totd);
+    const title = `Track of the Day - ${day[totd.day]} ${totd.monthDay}`;
+    let res = await embedTrackInfo(title, core_service, totd, groupUid, totd.mapUid, flags);
+    res['components'][0]['components'].unshift({
+        type: MessageComponentTypes.BUTTON,
+        style: ButtonStyleTypes.DANGER,
+        label: 'Cup of the Day',
+        custom_id: `cotd_button`,
+        emoji: {
+            id: null,
+            name: '🏆',
+        },
+    });
     return res;
 }
 

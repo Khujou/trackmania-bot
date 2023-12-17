@@ -8,6 +8,7 @@ import {
     ButtonStyleTypes,
     verifyKeyMiddleware,
 } from 'discord-interactions';
+import * as schedule from 'node-schedule';
 import * as trackmania from './trackmania.js';
 import { DiscordRequest } from './utils.js';
 
@@ -15,13 +16,16 @@ import { DiscordRequest } from './utils.js';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const core_service = new trackmania.CoreService();
+const live_service = new trackmania.LiveService();
+const meet_service = new trackmania.MeetService();
+
+let totd_channel = '1183478764856942642';
+
 // Interactions endpoint URL where Discord will send HTTP requests
 app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (req, res) => {
     // Interaction type and data
     const { type, id, data, token, message } = req.body;
-    const core_service = new trackmania.CoreService();
-    const live_service = new trackmania.LiveService();
-    const meet_service = new trackmania.MeetService();
 
     // Handle verification requests
     if (type === InteractionResponseType.PING) {
@@ -82,50 +86,79 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                     ],
                 }
             })
-        } else if (name === 'totd') {
+        } 
+        else if (name === 'totd') {
             res.send({
                 type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
             });
-            await DiscordRequest(endpoint, {
-                method: 'PATCH',
-                body: await trackmania.trackOfTheDay(core_service, live_service)
+            try {
+                await DiscordRequest(endpoint, {
+                    method: 'PATCH',
+                    body: await trackmania.trackOfTheDay(core_service, live_service, InteractionResponseFlags.EPHEMERAL)
             });
-        } 
-        // else if (name === 'cotd') {
-        //     return res.send(await trackmania.cupOfTheDay(meet_service));
-        // }
+            } catch (err) {
+                await DiscordRequest(endpoint, {
+                    method: 'PATCH',
+                    body: {
+                        content: `Unable to complete request: ${err.stack}`,
+                    }
+                })
+            }
+        }
 
     }
     if (type === InteractionType.MESSAGE_COMPONENT) {
         const componentId = data.custom_id;
 
         if (componentId === 'cotd_button') {
-
-            const endpoint = `webhooks/${process.env.APP_ID}/${token}/messages/${message.id}`;
+            const endpoint = `channels/${message.channel_id}/messages/${message.id}`;
 
             try {
                 await DiscordRequest(endpoint, { 
                     method: 'PATCH',
-                    body: await trackmania.cupOfTheDay(meet_service)
+                    body: {
+                        content: 'epic failure this feature doesnt exist yet lolol',
+                        embeds: [],
+                        components: [{
+                            type: MessageComponentTypes.ACTION_ROW,
+                            components: [{
+                                type: MessageComponentTypes.BUTTON,
+                                style: ButtonStyleTypes.PRIMARY,
+                                label: 'Track of the Day',
+                                custom_id: 'totd_button',
+                                emoji: {
+                                    id: null,
+                                    name: '📋',
+                                },
+                            },],
+                        },],
+                    },
                 });
             } catch (err) {
-                console.error('Error sending message:', err);
+                console.error(`Error sending message: ${err}`);
             }
         } else if (componentId === 'totd_button') {
-            const endpoint = `channels/${req.body.channel_id}/messages/${message.id}`;
+            const endpoint = `channels/${message.channel_id}/messages/${message.id}`;
 
             try {
-                await DiscordRequest(endpoint, { method: 'DELETE' });
-                return res.send({
-                    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                    data: await trackmania.trackOfTheDay(core_service, live_service),
-                })
+                await DiscordRequest(endpoint, {
+                    method: 'PATCH',
+                    body: await trackmania.trackOfTheDay(core_service, live_service, InteractionResponseFlags.EPHEMERAL),
+                });
             } catch (err) {
-                console.error('Error sending message:', err);
+                console.error(`Error sending message: ${err}`);
             }
         }
     }
 });
+
+const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
+    await DiscordRequest(`channels/${totd_channel}/messages`, {
+        method: 'POST',
+        body: await trackmania.trackOfTheDay(core_service, live_service),
+    });
+});
+
 
 app.listen(PORT, () => {
     console.log('Listening on port', PORT);
