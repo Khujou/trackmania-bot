@@ -152,7 +152,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
     }
 });
 
-const daily_totd = schedule.scheduleJob('30 0 13 * * *', async() => {
+const daily_totd = schedule.scheduleJob('5 13 * * *', async() => {
     await DiscordRequest(`channels/${totd_channel}/messages`, {
         method: 'POST',
         body: await trackmania.trackOfTheDay(core_service, live_service),

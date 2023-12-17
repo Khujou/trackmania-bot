@@ -12,12 +12,12 @@ const SEARCH_MAP = {
     description: 'give filters to search for map on trackmania.exchange',
     type: 1,
     options: [{
-        name: '',
-        description: '',
+        name: 'a',
+        description: 'a',
         type: 3,
     },{
-        name: '',
-        description: '',
+        name: 'b',
+        description: 'b',
         type: 3,
     }],
 };
@@ -36,8 +36,9 @@ const TRACK_OF_THE_DAY_COMMAND = {
 };
 
 const ALL_COMMANDS = [
-    TEST_COMMAND, 
-    TRACK_OF_THE_DAY_COMMAND
+    TEST_COMMAND,
+    SEARCH_MAP,
+    TRACK_OF_THE_DAY_COMMAND,
 ];
 
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);

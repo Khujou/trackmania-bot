@@ -232,7 +232,7 @@ async function nadeoAuthentication(audience) {
  * @param {string} groupUid 
  * @param {string} mapUid 
  * @param {InteractionResponseFlags} flags 
- * @returns 
+ * @returns {Promise<JSON>}
  */
 export async function embedTrackInfo(title, core_service, groupUid, mapUid, flags = null) {
     const nadeo_map_info = (await core_service.getMapInfo(null, mapUid))[0];
@@ -250,6 +250,11 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
         'Thumbnail': nadeo_map_info.thumbnailUrl,
     }
 
+    /**
+     * Tries to find the track on trackmania.exchange. If it can, updates attributes of map
+     * with attributes from trackmania.exchange. If it cannot, only updates the Username attribute
+     * of map by using an API from Nadeo.
+     */
     let mx_map_info;
     try {
         mx_map_info = await fetchManiaExchange(`/api/maps/get_map_info/uid/${mapUid}`);
@@ -260,7 +265,7 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
         map.StyleName = parseInt(map_tags.find(tag => tag.Name === mx_map_info.StyleName).Color, 16)
     } catch (err) {
         console.error('Couldn\'t retrieve data from trackmania.exchange:', err);
-        mainModule.Username = fetchAccountName([nadeo_map_info.author])[nadeo_map_info.author];
+        map.Username = fetchAccountName([nadeo_map_info.author])[nadeo_map_info.author];
     }
 
     const medal_times = 
@@ -341,6 +346,13 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
     return res;
 }
 
+/**
+ * 
+ * @param {CoreService} core_service 
+ * @param {LiveService} live_service 
+ * @param {InteractionResponseFlags} flags 
+ * @returns {Promise<JSON>}
+ */
 export async function trackOfTheDay(core_service, live_service, flags = null) {
     /**
      * Obtain track of the day information, then display the track name, 
