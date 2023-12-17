@@ -256,8 +256,8 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
         map.Username = mx_map_info.Username;
         map.Difficulty = mx_map_info.DifficultyName;
         map.Tags = mx_map_info.Tags;
-        map.StyleName = mx_map_info.StyleName,
         map.Website = `https://trackmania.exchange/s/tr/${mx_map_info.TrackID}`
+        map.StyleName = parseInt(map_tags.find(tag => tag.Name === mx_map_info.StyleName).Color, 16)
     } catch (err) {
         console.error('Couldn\'t retrieve data from trackmania.exchange:', err);
         mainModule.Username = fetchAccountName([nadeo_map_info.author])[nadeo_map_info.author];
