@@ -22,6 +22,10 @@ const meet_service = new trackmania.MeetService();
 
 let totd_channel = '1183478764856942642';
 
+app.get('/', (req, res) => {
+    res.send('whats up');
+});
+
 // Interactions endpoint URL where Discord will send HTTP requests
 app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (req, res) => {
     // Interaction type and data

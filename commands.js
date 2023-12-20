@@ -11,15 +11,6 @@ const SEARCH_MAP = {
     name: 'search',
     description: 'give filters to search for map on trackmania.exchange',
     type: 1,
-    options: [{
-        name: 'a',
-        description: 'a',
-        type: 3,
-    },{
-        name: 'b',
-        description: 'b',
-        type: 3,
-    }],
 };
 
 const TRACK_OF_THE_DAY_COMMAND = {

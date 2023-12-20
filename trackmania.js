@@ -258,11 +258,12 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
     let mx_map_info;
     try {
         mx_map_info = await fetchManiaExchange(`/api/maps/get_map_info/uid/${mapUid}`);
+        console.log(mx_map_info);
         map.Username = mx_map_info.Username;
         map.Difficulty = mx_map_info.DifficultyName;
         map.Tags = mx_map_info.Tags;
-        map.Website = `https://trackmania.exchange/s/tr/${mx_map_info.TrackID}`
-        map.StyleName = parseInt(map_tags.find(tag => tag.Name === mx_map_info.StyleName).Color, 16)
+        map.Website = `https://trackmania.exchange/s/tr/${mx_map_info.TrackID}`;
+        map.StyleName = parseInt(map_tags.find(tag => tag.Name === mx_map_info.StyleName)?.Color, 16);
     } catch (err) {
         console.error('Couldn\'t retrieve data from trackmania.exchange:', err);
         map.Username = fetchAccountName([nadeo_map_info.author])[nadeo_map_info.author];
@@ -275,7 +276,7 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
         `:third_place: ${map.BronzeTime}\n`;
 
     let tags_str = '';
-    if (map.Tags !== 'not available') {
+    if (map.Tags !== null) {
         const tags = map.Tags.split(',');
         for (let i = 0; i < tags.length; i++) {
             tags_str += map_tags[parseInt(tags[i]) - 1]?.Name;
@@ -328,7 +329,7 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
                 },
             },],
         },],
-    }
+    };
 
     if (map.Website !== null) {
         res['components'][0]['components'].push({
