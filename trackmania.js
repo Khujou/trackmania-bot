@@ -108,7 +108,7 @@ class BaseService {
 
         if (!res.ok) {
             const data = await res.json();
-            console.log(res.status);
+            console.log(`hi ${res.status}`);
             throw new Error(JSON.stringify(data));
         }
 
@@ -164,6 +164,10 @@ async function fetchAccountName(account_id_list) {
         body: `grant_type=client_credentials&client_id=${process.env.TM_OAUTH2_CLIENT_ID}&client_secret=${process.env.TM_OAUTH2_CLIENT_SECRET}`
     });
 
+    const access_token = (await token.json()).access_token;
+
+    console.log(access_token);
+
     let endpoint = `https://api.trackmania.com/api/display-names`; let tmp = true;
     account_id_list.forEach((account_id) => {
         if (tmp === false) {
@@ -175,11 +179,17 @@ async function fetchAccountName(account_id_list) {
         endpoint += `accountId[]=${account_id}`
     });
 
+    console.log(endpoint);
+
+    await new Promise((resolve) => {setTimeout(resolve, 5000);})
+
     const account_name_list = await fetch(endpoint, {
         headers: {
-            Authorization: `Bearer ${(await token.json()).access_token}`,
+            Authorization: `Bearer ${access_token}`,
         },
     });
+
+    console.log(JSON.stringify(account_name_list));
 
     return await account_name_list.json();
 }
@@ -194,7 +204,7 @@ async function fetchManiaExchange(endpoint) {
 
     if (!res.ok) {
         const data = await res.json();
-        console.log(res.status);
+        console.log(`epic failure ${res.status}`);
         throw new Error(JSON.stringify(data));
     }
 
@@ -218,7 +228,7 @@ async function nadeoAuthentication(audience) {
 
     if (!res.ok) {
         const data = await res.json();
-        console.log(res.status);
+        console.log(`epic fail ${res.status}`);
         throw new Error(JSON.stringify(data));
     }
 
@@ -239,14 +249,15 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
 
     let map = {
         'Name': nadeo_map_info.filename.slice(0,-8),
-        'Username': null,
-        'Difficulty': null,
+        'Username': await fetchAccountName([nadeo_map_info.author])[nadeo_map_info.author],
+        'Difficulty': 'null',
         'AuthorTime': convertMS(nadeo_map_info.authorScore),
         'GoldTime': convertMS(nadeo_map_info.goldScore),
         'SilverTime': convertMS(nadeo_map_info.silverScore),
         'BronzeTime': convertMS(nadeo_map_info.bronzeScore),
         'Tags': null,
-        'StyleName': null,
+        'Website': null,
+        'StyleName': 0,
         'Thumbnail': nadeo_map_info.thumbnailUrl,
     }
 
@@ -258,15 +269,15 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
     let mx_map_info;
     try {
         mx_map_info = await fetchManiaExchange(`/api/maps/get_map_info/uid/${mapUid}`);
-        console.log(mx_map_info);
-        map.Username = mx_map_info.Username;
+        map.Name = mx_map_info.Name
+        //map.Username = mx_map_info.Username;
         map.Difficulty = mx_map_info.DifficultyName;
         map.Tags = mx_map_info.Tags;
         map.Website = `https://trackmania.exchange/s/tr/${mx_map_info.TrackID}`;
         map.StyleName = parseInt(map_tags.find(tag => tag.Name === mx_map_info.StyleName)?.Color, 16);
     } catch (err) {
         console.error('Couldn\'t retrieve data from trackmania.exchange:', err);
-        map.Username = fetchAccountName([nadeo_map_info.author])[nadeo_map_info.author];
+        //map.Username = await fetchAccountName([nadeo_map_info.author])[nadeo_map_info.author];
     }
 
     const medal_times = 
@@ -282,7 +293,7 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
             tags_str += map_tags[parseInt(tags[i]) - 1]?.Name;
             tags_str += '\n';
         };
-    } else {tags_str = map.Tags}
+    } else {tags_str = 'null'}
 
     const res = {
         flags: flags,
