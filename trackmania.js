@@ -164,10 +164,6 @@ async function fetchAccountName(account_id_list) {
         body: `grant_type=client_credentials&client_id=${process.env.TM_OAUTH2_CLIENT_ID}&client_secret=${process.env.TM_OAUTH2_CLIENT_SECRET}`
     });
 
-    const access_token = (await token.json()).access_token;
-
-    console.log(access_token);
-
     let endpoint = `https://api.trackmania.com/api/display-names`; let tmp = true;
     account_id_list.forEach((account_id) => {
         if (tmp === false) {
@@ -179,17 +175,11 @@ async function fetchAccountName(account_id_list) {
         endpoint += `accountId[]=${account_id}`
     });
 
-    console.log(endpoint);
-
-    await new Promise((resolve) => {setTimeout(resolve, 5000);})
-
     const account_name_list = await fetch(endpoint, {
         headers: {
-            Authorization: `Bearer ${access_token}`,
+            Authorization: `Bearer ${(await token.json()).access_token}`,
         },
     });
-
-    console.log(JSON.stringify(account_name_list));
 
     return await account_name_list.json();
 }
@@ -249,7 +239,7 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
 
     let map = {
         'Name': nadeo_map_info.filename.slice(0,-8),
-        'Username': await fetchAccountName([nadeo_map_info.author])[nadeo_map_info.author],
+        'Username': null,
         'Difficulty': 'null',
         'AuthorTime': convertMS(nadeo_map_info.authorScore),
         'GoldTime': convertMS(nadeo_map_info.goldScore),
@@ -270,14 +260,14 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
     try {
         mx_map_info = await fetchManiaExchange(`/api/maps/get_map_info/uid/${mapUid}`);
         map.Name = mx_map_info.Name
-        //map.Username = mx_map_info.Username;
+        map.Username = mx_map_info.Username;
         map.Difficulty = mx_map_info.DifficultyName;
         map.Tags = mx_map_info.Tags;
         map.Website = `https://trackmania.exchange/s/tr/${mx_map_info.TrackID}`;
         map.StyleName = parseInt(map_tags.find(tag => tag.Name === mx_map_info.StyleName)?.Color, 16);
     } catch (err) {
         console.error('Couldn\'t retrieve data from trackmania.exchange:', err);
-        //map.Username = await fetchAccountName([nadeo_map_info.author])[nadeo_map_info.author];
+        map.Username = (await fetchAccountName([nadeo_map_info.author]))[nadeo_map_info.author];
     }
 
     const medal_times = 
