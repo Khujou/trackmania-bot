@@ -41,6 +41,18 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         const { name } = data;
         const endpoint = `webhooks/${process.env.APP_ID}/${token}/messages/@original`;
 
+        if (name ==='tucker') {
+            res.send({
+                type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+            });
+            await DiscordRequest(endpoint, {
+                method: 'PATCH',
+                body: {
+                    content: 'i miss him <@203284058673774592>'
+                }
+            });
+        }
+
         if (name === 'test') {
             res.send({
                 type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
@@ -92,21 +104,22 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             })
         } 
         else if (name === 'totd') {
+            console.log(req.body);
             res.send({
                 type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
             });
             try {
                 await DiscordRequest(endpoint, {
                     method: 'PATCH',
-                    body: await trackmania.trackOfTheDay(core_service, live_service, InteractionResponseFlags.EPHEMERAL)
-            });
+                    body: await trackmania.trackOfTheDay(core_service, live_service),
+                });
             } catch (err) {
                 await DiscordRequest(endpoint, {
                     method: 'PATCH',
                     body: {
                         content: `Unable to complete request: ${err.stack}`,
                     }
-                })
+                });
             }
         }
 
@@ -156,7 +169,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
     }
 });
 
-const daily_totd = schedule.scheduleJob('5 13 * * *', async() => {
+const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
     await DiscordRequest(`channels/${totd_channel}/messages`, {
         method: 'POST',
         body: await trackmania.trackOfTheDay(core_service, live_service),

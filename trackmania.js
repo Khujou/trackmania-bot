@@ -67,12 +67,7 @@ export const map_tags = [
     { ID: 51, Name: 'Wood', Color: '814b00' }
 ];
 
-const day = ['Mon.', 'Tue.', 'Wed.', 'Thur.', 'Fri.', 'Sat.', 'Sun.'];
-
-let currentDay = new Date().getDate();
-const changeDay = schedule.scheduleJob('0 0 * * *', () => {
-    currentDay = new Date().getDate();
-});
+const dayOfTheWeek = ['Mon.', 'Tue.', 'Wed.', 'Thur.', 'Fri.', 'Sat.', 'Sun.'];
 
 class BaseService {
     constructor(url, audience) {
@@ -141,12 +136,12 @@ export class LiveService extends BaseService {
         super('https://live-services.trackmania.nadeo.live', 'NadeoLiveServices');
     }
 
-    async trackOfTheDay(offset = 0, day = currentDay - 1) {
+    async trackOfTheDay(day, offset = 0) {
         const tracks_of_the_month = (await this.fetchEndpoint(`/api/token/campaign/month?length=1&offset=${offset}`)).monthList[0];
-        if (tracks_of_the_month.days[day]?.relativeStart > 0) {
-            return tracks_of_the_month.days[day - 1];
+        if (tracks_of_the_month.days[day - 1]?.relativeStart > 0) {
+            return tracks_of_the_month.days[day - 2];
         } else {
-            return tracks_of_the_month.days[day];
+            return tracks_of_the_month.days[day - 1];
         }
     }
 }
@@ -234,8 +229,10 @@ async function nadeoAuthentication(audience) {
  * @param {InteractionResponseFlags} flags 
  * @returns {Promise<JSON>}
  */
-export async function embedTrackInfo(title, core_service, groupUid, mapUid, flags = null) {
+export async function embedTrackInfo(modetype, day, core_service, groupUid, mapUid, flags = null) {
     const nadeo_map_info = (await core_service.getMapInfo(null, mapUid))[0];
+
+    console.log(nadeo_map_info);
 
     let map = {
         'Name': nadeo_map_info.filename.slice(0,-8),
@@ -272,9 +269,7 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
 
     const medal_times = 
         `:medal: ${map.AuthorTime}\n` +
-        `:first_place: ${map.GoldTime}\n` +
-        `:second_place: ${map.SilverTime}\n` +
-        `:third_place: ${map.BronzeTime}\n`;
+        `:first_place: ${map.GoldTime}\n`;
 
     let tags_str = '';
     if (map.Tags !== null) {
@@ -288,20 +283,15 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
     const res = {
         flags: flags,
         embeds: [{
-            title: title,
+            title: map.Name,
             color: map.StyleName,
             fields: [{
-                name: 'Map',
-                value: map.Name,
-                inline: true,
-            },{
-                name: 'Difficulty',
-                value: map.Difficulty,
-                inline: true,
-            },{
                 name: 'Author',
                 value: map.Username,
-            },{
+                inline: true,
+            },
+            //{ name: 'Difficulty', value: map.Difficulty, inline: true, },
+            {
                 name: 'Medal Times',
                 value: medal_times,
                 inline: true,
@@ -311,6 +301,9 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
                 inline: true,
             },
             ],
+            author: {
+                name: `${modetype} - ${day}`,
+            },
             image: {
                 url: map.Thumbnail,
                 height: 100,
@@ -355,7 +348,7 @@ export async function embedTrackInfo(title, core_service, groupUid, mapUid, flag
  * @param {InteractionResponseFlags} flags 
  * @returns {Promise<JSON>}
  */
-export async function trackOfTheDay(core_service, live_service, flags = null) {
+export async function trackOfTheDay(core_service, live_service, monthsAgo = 0, monthDay = new Date().getDate(), flags = null) {
     /**
      * Obtain track of the day information, then display the track name, 
      * the track author, the track thumbnail, the times for the medals,
@@ -363,10 +356,12 @@ export async function trackOfTheDay(core_service, live_service, flags = null) {
      * 
      * TEMPORARY FILE to CACHE totd data for the day once requested
      */
-    const totd = await live_service.trackOfTheDay();
+    console.log(monthDay);
+    const totd = await live_service.trackOfTheDay(monthDay);
     console.log(totd);
-    const title = `Track of the Day - ${day[totd.day]} ${totd.monthDay}`;
-    let res = await embedTrackInfo(title, core_service, totd.seasonUid, totd.mapUid, flags);
+    const modetype = `Track of the Day`;
+    const day = `${dayOfTheWeek[totd.day]} ${totd.monthDay}`;
+    let res = await embedTrackInfo(modetype, day, core_service, totd.seasonUid, totd.mapUid, flags);
     res['components'][0]['components'].unshift({
         type: MessageComponentTypes.BUTTON,
         style: ButtonStyleTypes.DANGER,

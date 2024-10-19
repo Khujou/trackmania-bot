@@ -26,10 +26,17 @@ const TRACK_OF_THE_DAY_COMMAND = {
     }],
 };
 
+const TUCKER = {
+    name: 'tucker',
+    description: 'besto furendo',
+    type: 1,
+}
+
 const ALL_COMMANDS = [
     TEST_COMMAND,
     SEARCH_MAP,
     TRACK_OF_THE_DAY_COMMAND,
+    TUCKER
 ];
 
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
