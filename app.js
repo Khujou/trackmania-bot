@@ -166,8 +166,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             let track_json = null;
             const totdDate = new Date();
             if (options[0].name === 'past') {
-                let inputDate = new Date(data.options[0].options[0].value, data.options[0].options[1].value - 1, data.options[0].options[2].value);
-
+                const fields = options[0].options;
+                let inputDate = new Date(fields[0].value, fields[1].value - 1, fields[2].value);
                 if (inputDate > totdDate)
                     inputDate = totdDate;
                 else if (inputDate < startDate)
@@ -244,7 +244,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             let command;
             if (args[1] === 'totd') command = `Track of the Day - ${args[4]}`;
             else { command = 'Map Search'; }
-            
+
             console.log(args);
 
             await DiscordRequest(endpoint, {

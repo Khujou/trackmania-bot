@@ -107,7 +107,7 @@ class BaseService {
 
     /**
      * gets access token
-     * @returns {JSON}
+     * @returns {Promise<JSON>}
      */
     async getAccessToken() {
         return await getUpToDateNadeoAuthToken('nadeoAuthToken.json', nadeoAuthentication, this.audience);
@@ -161,7 +161,7 @@ export class LiveService extends BaseService {
      * 
      * @param {number} offset 
      * @param {number} day 
-     * @returns {JSON}
+     * @returns {Promise<JSON>}
      */
     async trackOfTheDay(offset, day) {
         const tracks_of_the_month = await this.fetchEndpoint(`/api/token/campaign/month?length=1&offset=${offset}`).then(response => response.monthList[0]);
@@ -381,6 +381,9 @@ export async function embedTrackInfo(live_service, track_json) {
                 url: track_json.thumbnail,
                 height: 100,
                 width: 100,
+            },
+            footer: {
+                text: `MapUid:\n${track_json.mapUid}`,
             },
         },],
         components: [{
