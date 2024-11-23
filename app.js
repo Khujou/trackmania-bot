@@ -39,33 +39,17 @@ async function run() {
 }
 run().catch(console.dir);
 
-/*
-fs.open(totdfile, 'wx+', (err, fd) => {
-    if (err) {
-        if (err.code === 'EEXIST') {
-            console.error('totd.json exists');
-            return;
-        }
-        throw err;
-    }
-    try {
-        fs.writeFile(fd, JSON.stringify({
-            endTimestamp: 0,
-        }, null, 2), (err) => {
-            if (err) console.error(err);
-            else console.log('File created successfully');
-        });
-    } finally {
-        fs.close(fd, err => { if (err) throw err; });
-    }
-});
-*/
-
 const core_service = new trackmania.CoreService();
 const live_service = new trackmania.LiveService();
 const meet_service = new trackmania.MeetService();
 
-async function updateTOTDFile(filepath, callback) {
+/**
+ * Returns up-to-date TOTD info. Checks if stored TOTD info is out of date and replaces with up-to-date info.
+ * @param {string} filepath 
+ * @param {Promise<JSON>} callback 
+ * @returns {Promise<JSON>}
+ */
+async function getUpToDateTOTDInfo(filepath, callback) {
     let json = await fs.promises.readFile(filepath, { encoding: 'utf8' }).then(data => JSON.parse(data));
     if (json.endTimestamp < (Math.floor(Date.now() / 1000))) {
         if (await fs.promises.writeFile(filepath, await callback.then(data => JSON.stringify(data, null, 2)), 'utf8') === undefined)
@@ -73,7 +57,8 @@ async function updateTOTDFile(filepath, callback) {
     }
     return json;
 }
-console.log(await updateTOTDFile(totdfile, trackmania.trackOfTheDay(core_service, live_service, new Date())));
+
+console.log(await getUpToDateTOTDInfo(totdfile, trackmania.trackOfTheDay(core_service, live_service)));
 
 const startDate = new Date(2020, 6, 1);
 let totd_channel = '1183478764856942642';
@@ -94,7 +79,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
     // Handle slash command requests
     if (type === InteractionType.APPLICATION_COMMAND) {
-        const { name } = data;
+        const { name, options } = data;
         const postendpoint = `webhooks/${process.env.APP_ID}/${token}`;
         const endpoint = `${postendpoint}/messages/@original`;
 
@@ -173,7 +158,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         }
 
         else if (name === 'totd') {
-
             res.send({
                 type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
                 /* data: { flags: InteractionResponseFlags.EPHEMERAL, } */
@@ -181,7 +165,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
             let track_json = null;
             const totdDate = new Date();
-            if (data.options[0].name === 'past') {
+            if (options[0].name === 'past') {
                 let inputDate = new Date(data.options[0].options[0].value, data.options[0].options[1].value - 1, data.options[0].options[2].value);
 
                 if (inputDate > totdDate)
@@ -192,7 +176,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 track_json = await trackmania.trackOfTheDay(core_service, live_service, inputDate).catch(err => embeddedErrorMessage(endpoint, err));
             } else {
                 console.log('about to open file');
-                track_json = await updateTOTDFile(totdfile, trackmania.trackOfTheDay(core_service, live_service, new Date())).catch(err => embeddedErrorMessage(endpoint, err));
+                track_json = await getUpToDateTOTDInfo(totdfile, trackmania.trackOfTheDay(core_service, live_service)).catch(err => embeddedErrorMessage(endpoint, err));
                 console.log('finished file ops');
             }
 
@@ -201,8 +185,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
                 body: await trackmania.embedTrackInfo(live_service, track_json),
-            }).catch(err => embeddedErrorMessage(endpoint, err));
-
+            })
+            .catch(err => embeddedErrorMessage(endpoint, err));
         }
 
     }

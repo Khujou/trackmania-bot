@@ -1,5 +1,6 @@
 node_modules
 .env
 totd.json
+nadeoAuthToken.json
 tests.js
 .todo

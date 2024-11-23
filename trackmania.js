@@ -66,6 +66,34 @@ const map_tags = [
 const dayOfTheWeek = ['Mon.', 'Tue.', 'Wed.', 'Thur.', 'Fri.', 'Sat.', 'Sun.'];
 const monthOfTheYear = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+async function getUpToDateNadeoAuthToken(filepath, callback, audience) {
+    let filehandle;
+    filehandle = await fs.promises.open(filepath, 'r+', 0o666)
+    .catch(async err => {
+        console.error(err);
+        await fs.promises.writeFile(filepath, JSON.stringify({ 
+            'NadeoServices': { expirationTime: 0 },
+            'NadeoLiveServices': { expirationTime: 0 },
+            'NadeoClubServices': { expirationTime: 0 },
+        }, null, 2), 'utf8');
+    });
+    let token = await fs.promises.readFile(filepath, { encoding: 'utf8' }).then(data => JSON.parse(data));
+    if (token[audience].expirationTime < (Math.floor(Date.now() / 1000)) ) {
+        console.log('retrieving new token');
+        const at = await callback(audience);
+        const unencoded_at = JSON.parse(atob(at.accessToken.split('.')[1]));
+        token[audience] = {
+            'accessToken': at.accessToken,
+            'refreshToken': at.refreshToken,
+            'refreshTime': unencoded_at.rat,
+            'expirationTime': unencoded_at.exp
+        };
+        fs.promises.writeFile(filepath, JSON.stringify(token, null, 2), 'utf8');
+    }
+    filehandle.close().catch(err => console.log(`wtf ${err}`));
+    return token[audience];
+}
+
 class BaseService {
     /**
      * sets the url and audience for this service
@@ -82,21 +110,7 @@ class BaseService {
      * @returns {JSON}
      */
     async getAccessToken() {
-        // if (JSON.parse(fs.readFile('data', (err, data) => {
-        //     if (err) throw err
-        //         console.log(err);
-        // })).expirationTime < Math.round(Date.now() / 1000)) {
-        //     //refresh token
-        // } else {
-        const at = await nadeoAuthentication(this.audience);
-        const unencoded_at = JSON.parse(atob(at.accessToken.split('.')[1]));
-        const res = {'accessToken': at.accessToken,
-            'refreshToken': at.refreshToken,
-            'refreshTime': unencoded_at.rat,
-            'expirationTime': unencoded_at.exp};
-        // }
-
-        return res;
+        return await getUpToDateNadeoAuthToken('nadeoAuthToken.json', nadeoAuthentication, this.audience);
     }
 
     /**
@@ -105,19 +119,16 @@ class BaseService {
      * @returns {Promise<JSON>}
      */
     async fetchEndpoint(endpoint) {
-        const res = await fetch(this.url + endpoint, {
+        return await fetch(this.url + endpoint, {
             headers: {
+                "User-Agent": 'trackmania-bot Discord Bot : https://github.com/Khujou/trackmania-bot',
                 Authorization: `nadeo_v1 t=${await this.getAccessToken().then(response => response.accessToken)}`,
             }
+        })
+        .then(async res => await res.json())
+        .catch(err => {
+            console.error(err);
         });
-
-        if (!res.ok) {
-            const data = await res.json();
-            console.log(`hi ${res.status}`);
-            throw new Error(JSON.stringify(data));
-        }
-
-        return res.json();
     }
 }
 
