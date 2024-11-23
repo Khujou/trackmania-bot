@@ -7,22 +7,45 @@ const TEST_COMMAND = {
     type: 1,
 };
 
-const SEARCH_MAP = {
-    name: 'search',
-    description: 'give filters to search for map on trackmania.exchange',
+const SETTINGS = {
+    name: 'settings',
+    description: 'settings command',
     type: 1,
 };
 
 const TRACK_OF_THE_DAY_COMMAND = {
     name: 'totd',
-    description: 'track of the day',
+    description: 'track of the day command',
     type: 1,
     options: [{
-        name: 'month',
-        description: 'number of months ago that you want the month of the totds, goes up to 12 months ago',
-        type: 4,
-        min_value: 0,
-        max_value: 12,
+        name: 'today',
+        description: 'Get today\'s Track of the Day',
+        type: 1,
+    },{
+        name: 'past',
+        description: 'Input a date to get a specific Track of the Day',
+        type: 1,
+        options: [{
+            name: 'year',
+            description: 'year',
+            type: 4,
+            required: true,
+            min_value: 2020,
+        },{
+            name: 'month',
+            description: 'month',
+            type: 4,
+            required: true,
+            min_value: 1,
+            max_value: 12,
+        },{
+            name: 'day',
+            description: 'day',
+            type: 4,
+            required: true,
+            min_value: 1,
+            max_value: 31,
+        },]
     }],
 };
 
@@ -34,7 +57,7 @@ const TUCKER = {
 
 const ALL_COMMANDS = [
     TEST_COMMAND,
-    SEARCH_MAP,
+    SETTINGS,
     TRACK_OF_THE_DAY_COMMAND,
     TUCKER
 ];

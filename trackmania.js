@@ -1,10 +1,4 @@
-import { 
-    InteractionType,
-    InteractionResponseType,
-    InteractionResponseFlags,
-    MessageComponentTypes,
-    ButtonStyleTypes 
-} from 'discord-interactions';
+import { MessageComponentTypes, ButtonStyleTypes } from 'discord-interactions';
 import 'dotenv/config';
 import fetch from 'node-fetch';
 import * as NodeCache from 'node-cache';
@@ -12,8 +6,10 @@ import * as schedule from 'node-schedule';
 import * as fs from 'node:fs';
 import { convertMillisecondsToFormattedTime as convertMS } from './utils.js';
 
-// JSON of all trackmania.exchange map tags
-export const map_tags = [
+/**
+ *  JSON of all trackmania.exchange map tags with ID, Name, and Color associated
+ */ 
+const map_tags = [
     { ID: 1, Name: 'Race', Color: '' },
     { ID: 2, Name: 'FullSpeed', Color: '' },
     { ID: 3, Name: 'Tech', Color: '' },
@@ -68,14 +64,23 @@ export const map_tags = [
 ];
 
 const dayOfTheWeek = ['Mon.', 'Tue.', 'Wed.', 'Thur.', 'Fri.', 'Sat.', 'Sun.'];
+const monthOfTheYear = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 class BaseService {
+    /**
+     * sets the url and audience for this service
+     * @param {string} url 
+     * @param {string} audience 
+     */
     constructor(url, audience) {
         this.url = url;
         this.audience = audience;
-
     }
 
+    /**
+     * gets access token
+     * @returns {JSON}
+     */
     async getAccessToken() {
         // if (JSON.parse(fs.readFile('data', (err, data) => {
         //     if (err) throw err
@@ -94,6 +99,11 @@ class BaseService {
         return res;
     }
 
+    /**
+     * fetches json from endpoint
+     * @param {string} endpoint 
+     * @returns {Promise<JSON>}
+     */
     async fetchEndpoint(endpoint) {
         const res = await fetch(this.url + endpoint, {
             headers: {
@@ -116,12 +126,12 @@ export class CoreService extends BaseService {
         super('https://prod.trackmania.core.nadeo.online', 'NadeoServices');
     }
 
-    async getMapInfo(mapIdList, mapUidList) {
+    async getMapInfo(mapIdList = undefined, mapUidList = undefined) {
         let data;
-        if (mapIdList !== null) {
+        if (mapIdList !== undefined) {
             data = await this.fetchEndpoint(`/maps/?mapIdList=${mapIdList}`);
         }
-        else if (mapUidList !== null) {
+        else if (mapUidList !== undefined) {
             data = await this.fetchEndpoint(`/maps/?mapUidList=${mapUidList}`);
         }
         else {
@@ -136,13 +146,26 @@ export class LiveService extends BaseService {
         super('https://live-services.trackmania.nadeo.live', 'NadeoLiveServices');
     }
 
-    async trackOfTheDay(day, offset = 0) {
-        const tracks_of_the_month = (await this.fetchEndpoint(`/api/token/campaign/month?length=1&offset=${offset}`)).monthList[0];
+    async trackOfTheDay(offset, day) {
+        const tracks_of_the_month = await this.fetchEndpoint(`/api/token/campaign/month?length=1&offset=${offset}`).then(response => response.monthList[0]);
         if (tracks_of_the_month.days[day - 1]?.relativeStart > 0) {
             return tracks_of_the_month.days[day - 2];
         } else {
             return tracks_of_the_month.days[day - 1];
         }
+    }
+
+    /**
+     * 
+     * @param {string} customId Combine the groupUid and the mapUid of the map that you would like the leaderboard of into a string like this - `${groupUid}/map/${mapUid}`
+     * @param {number} [length=5]
+     * @param {boolean} [onlyWorld=true]
+     * @param {number} [offset=0]
+     * @returns {Promise<JSON>}
+     */
+    async getMapLeaderboard(customId, length = 5, onlyWorld = true, offset = 0) {
+        const map_leaderboard = await this.fetchEndpoint(`/api/token/leaderboard/group/${customId}/top?length=${length}&onlyWorld=${onlyWorld}&offset=${offset}`).then(response => response.tops[0].top);
+        return map_leaderboard;
     }
 }
 
@@ -150,38 +173,46 @@ export class MeetService extends BaseService {
     constructor() {
         super('https://meet.trackmania.nadeo.club', 'NadeoClubServices');
     }
+
+    async cupOfTheDay() {
+        const current_cotd = await this.fetchEndpoint('/api/cup-of-the-day/current');
+        return current_cotd;
+    }
 }
 
+/**
+ * 
+ * @param {JSON} account_id_list 
+ * @returns {Promise<JSON>}
+ */
 async function fetchAccountName(account_id_list) {
     const token = await fetch('https://api.trackmania.com/api/access_token', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: `grant_type=client_credentials&client_id=${process.env.TM_OAUTH2_CLIENT_ID}&client_secret=${process.env.TM_OAUTH2_CLIENT_SECRET}`
-    });
+    }).then(response => response.json());
 
-    let endpoint = `https://api.trackmania.com/api/display-names`; let tmp = true;
-    account_id_list.forEach((account_id) => {
-        if (tmp === false) {
-            endpoint += '&';
-        } else {
-            endpoint += '?'
-            tmp = false;
-        }
+    let endpoint = `https://api.trackmania.com/api/display-names`;
+    account_id_list.forEach((account_id, i) => {
+        if (i === 0) endpoint += '?';
+        else endpoint += '&';
         endpoint += `accountId[]=${account_id}`
     });
 
-    const account_name_list = await fetch(endpoint, {
+    return await fetch(endpoint, {
         headers: {
-            Authorization: `Bearer ${(await token.json()).access_token}`,
+            Authorization: `Bearer ${token.access_token}`,
         },
-    });
-
-    return await account_name_list.json();
+    }).then(response => response.json());
 }
 
+/**
+ * fetches info from API endpoint from trackmania.exchange website
+ * @param {string} endpoint 
+ * @returns {Promise<JSON>}
+ */
 async function fetchManiaExchange(endpoint) {
-    const url = 'https://trackmania.exchange';
-    const res = await fetch(url + endpoint, {
+    const res = await fetch('https://trackmania.exchange' + endpoint, {
         headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; DiscordBot/0.1)',
         }
@@ -196,56 +227,69 @@ async function fetchManiaExchange(endpoint) {
     return res.json();
 }
 
+/**
+ * receives authentication token from official nadeo API
+ * @param {string} audience 
+ * @returns {Promise<JSON>}
+ */
 async function nadeoAuthentication(audience) {
     const url = 'https://prod.trackmania.core.nadeo.online/v2/authentication/token/basic';
     const login_password_base64 = btoa(Buffer.from(`${process.env.TM_SERVER_ACC_LOGIN}:${process.env.TM_SERVER_ACC_PASSWORD}`));
 
-    const res = await fetch (url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Basic ${login_password_base64}`,
-        },
-        body: JSON.stringify({
-            'audience':`${audience}`,
-        }),
-    });
+    try {
+        return await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Basic ${login_password_base64}`,
+            },
+            body: JSON.stringify({
+                'audience':`${audience}`,
+            }),
+        }).then(response => response.json());
+    } catch (err) {
+        console.log(err);
+        return;
+    }
+    
+    /*
+    console.log(res);
 
     if (!res.ok) {
-        const data = await res.json();
+        const data = res;
         console.log(`epic fail ${res.status}`);
         throw new Error(JSON.stringify(data));
     }
 
-    return res.json();
+    return res;
+    */
 }
 
 /**
  * 
- * @param {string} title 
  * @param {CoreService} core_service 
- * @param {string} groupUid 
+ * @param {LiveService} live_service 
+ * @param {string} command 
  * @param {string} mapUid 
- * @param {InteractionResponseFlags} flags 
- * @returns {Promise<JSON>}
+ * @param {string} [groupUid='Personal_Best']
+ * @returns {JSON}
  */
-export async function embedTrackInfo(modetype, day, core_service, groupUid, mapUid, flags = null) {
-    const nadeo_map_info = (await core_service.getMapInfo(null, mapUid))[0];
+export async function getTrackInfo(core_service, live_service, command, mapUid, groupUid = 'Personal_Best') {
+    
+    const nadeo_map_info = await core_service.getMapInfo(undefined, mapUid).then(response => response[0]);
 
-    console.log(nadeo_map_info);
-
-    let map = {
-        'Name': nadeo_map_info.filename.slice(0,-8),
-        'Username': null,
-        'Difficulty': 'null',
-        'AuthorTime': convertMS(nadeo_map_info.authorScore),
-        'GoldTime': convertMS(nadeo_map_info.goldScore),
-        'SilverTime': convertMS(nadeo_map_info.silverScore),
-        'BronzeTime': convertMS(nadeo_map_info.bronzeScore),
-        'Tags': null,
-        'Website': null,
-        'StyleName': 0,
-        'Thumbnail': nadeo_map_info.thumbnailUrl,
+    let track_json = {
+        command: command,
+        title: nadeo_map_info.filename.slice(0,-8),
+        author: null,
+        authortime: convertMS(nadeo_map_info.authorScore),
+        goldtime: convertMS(nadeo_map_info.goldScore),
+        tags: null,
+        website: null,
+        stylename: 0,
+        thumbnail: nadeo_map_info.thumbnailUrl,
+        groupUid: groupUid,
+        mapUid: mapUid,
     }
 
     /**
@@ -253,45 +297,58 @@ export async function embedTrackInfo(modetype, day, core_service, groupUid, mapU
      * with attributes from trackmania.exchange. If it cannot, only updates the Username attribute
      * of map by using an API from Nadeo.
      */
-    let mx_map_info;
-    try {
-        mx_map_info = await fetchManiaExchange(`/api/maps/get_map_info/uid/${mapUid}`);
-        map.Name = mx_map_info.Name
-        map.Username = mx_map_info.Username;
-        map.Difficulty = mx_map_info.DifficultyName;
-        map.Tags = mx_map_info.Tags;
-        map.Website = `https://trackmania.exchange/s/tr/${mx_map_info.TrackID}`;
-        map.StyleName = parseInt(map_tags.find(tag => tag.Name === mx_map_info.StyleName)?.Color, 16);
-    } catch (err) {
+    await fetchManiaExchange(`/api/maps/get_map_info/uid/${mapUid}`)
+    .then(response => {
+        track_json.title = response.Name
+        track_json.author = response.Username;
+        track_json.tags = response.Tags;
+        track_json.website = `https://trackmania.exchange/s/tr/${response.TrackID}`;
+        track_json.stylename = parseInt(map_tags.find(tag => tag.Name === response.StyleName)?.Color, 16);
+    })
+    .catch(async err => {
         console.error('Couldn\'t retrieve data from trackmania.exchange:', err);
-        map.Username = (await fetchAccountName([nadeo_map_info.author]))[nadeo_map_info.author];
-    }
+        track_json.author = await fetchAccountName([nadeo_map_info.author])
+        .then(response => response[nadeo_map_info.author])
+        .catch(err => {
+            console.log('Can\'t get author WTF');
+            console.error(err);
+            track_json.author = nadeo_map_info.author;
+        });
+    });
+
+    return track_json;
+}
+
+/**
+ * creates a discord-compatible json using parsed info from Nadeo and Trackmania.Exchange
+ * @param {JSON} track_json
+ * @returns {Promise<JSON>}
+ */
+export async function embedTrackInfo(live_service, track_json) {
 
     const medal_times = 
-        `:medal: ${map.AuthorTime}\n` +
-        `:first_place: ${map.GoldTime}\n`;
+        `:first_place: ${await live_service.getMapLeaderboard(`${track_json.groupUid}/map/${track_json.mapUid}`, 1).then(response => convertMS(response[0].score))}\n` +
+        `:green_circle: ${track_json.authortime}\n` +
+        `:yellow_circle: ${track_json.goldtime}`;
 
     let tags_str = '';
-    if (map.Tags !== null) {
-        const tags = map.Tags.split(',');
-        for (let i = 0; i < tags.length; i++) {
-            tags_str += map_tags[parseInt(tags[i]) - 1]?.Name;
+    if (track_json.tags !== null) {
+        track_json.tags.split(',').forEach((tag) => {
+            tags_str += map_tags[parseInt(tag) - 1]?.Name;
             tags_str += '\n';
-        };
-    } else {tags_str = 'null'}
+        });
+    } else {tags_str = 'not available'}
 
     const res = {
-        flags: flags,
         embeds: [{
-            title: map.Name,
-            color: map.StyleName,
+            author: { name: `${track_json.command}`, },
+            title: track_json.title,
+            color: track_json.stylename,
             fields: [{
                 name: 'Author',
-                value: map.Username,
+                value: track_json.author,
                 inline: true,
-            },
-            //{ name: 'Difficulty', value: map.Difficulty, inline: true, },
-            {
+            },{
                 name: 'Medal Times',
                 value: medal_times,
                 inline: true,
@@ -301,11 +358,8 @@ export async function embedTrackInfo(modetype, day, core_service, groupUid, mapU
                 inline: true,
             },
             ],
-            author: {
-                name: `${modetype} - ${day}`,
-            },
             image: {
-                url: map.Thumbnail,
+                url: track_json.thumbnail,
                 height: 100,
                 width: 100,
             },
@@ -316,7 +370,7 @@ export async function embedTrackInfo(modetype, day, core_service, groupUid, mapU
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.PRIMARY,
                 label: 'Leaderboard',
-                custom_id: `map_leaderboard_${groupUid}_${mapUid}`,
+                custom_id: `lb;${track_json.groupUid}/map/${track_json.mapUid};25;true;0`,
                 emoji: {
                     id: null,
                     name: '📋',
@@ -325,12 +379,12 @@ export async function embedTrackInfo(modetype, day, core_service, groupUid, mapU
         },],
     };
 
-    if (map.Website !== null) {
+    if (track_json.website !== null) {
         res['components'][0]['components'].push({
             type: MessageComponentTypes.BUTTON,
             style: ButtonStyleTypes.LINK,
             label: 'Map on TMX',
-            url: map.Website,
+            url: track_json.website,
             emoji: {
                 id: null,
                 name: '💻',
@@ -341,14 +395,19 @@ export async function embedTrackInfo(modetype, day, core_service, groupUid, mapU
     return res;
 }
 
+
+export function embedLeaderboardInfo() {
+
+}
+
 /**
  * 
  * @param {CoreService} core_service 
  * @param {LiveService} live_service 
- * @param {InteractionResponseFlags} flags 
+ * @param {Date} [inputDate=new Date()]
  * @returns {Promise<JSON>}
  */
-export async function trackOfTheDay(core_service, live_service, monthsAgo = 0, monthDay = new Date().getDate(), flags = null) {
+export async function trackOfTheDay(core_service, live_service, inputDate = new Date()) {
     /**
      * Obtain track of the day information, then display the track name, 
      * the track author, the track thumbnail, the times for the medals,
@@ -356,45 +415,169 @@ export async function trackOfTheDay(core_service, live_service, monthsAgo = 0, m
      * 
      * TEMPORARY FILE to CACHE totd data for the day once requested
      */
-    console.log(monthDay);
-    const totd = await live_service.trackOfTheDay(monthDay);
-    console.log(totd);
-    const modetype = `Track of the Day`;
-    const day = `${dayOfTheWeek[totd.day]} ${totd.monthDay}`;
-    let res = await embedTrackInfo(modetype, day, core_service, totd.seasonUid, totd.mapUid, flags);
-    res['components'][0]['components'].unshift({
-        type: MessageComponentTypes.BUTTON,
-        style: ButtonStyleTypes.DANGER,
-        label: 'Cup of the Day',
-        custom_id: `cotd_button`,
-        emoji: {
-            id: null,
-            name: '🏆',
-        },
-    });
+    const currDate = new Date();
+    const offset = ((currDate.getUTCFullYear() - inputDate.getUTCFullYear()) * 12) + ((currDate.getUTCMonth()) - inputDate.getUTCMonth());
+    const totd = await live_service.trackOfTheDay(offset, inputDate.getUTCDate());
+    const command = `Track of the Day - ${dayOfTheWeek[totd.day]} ${monthOfTheYear[inputDate.getUTCMonth()]} ${totd.monthDay}, ${inputDate.getUTCFullYear()}`;
+
+    let track_info = await getTrackInfo(core_service, live_service, command, totd.mapUid, totd.seasonUid);
+    track_info.endTimestamp = totd.endTimestamp;
+    return track_info;
+    
+}
+
+export async function cupOfTheDay(meet_service) {
+    let res = await meet_service.cupOfTheDay();
+    console.log(res);
     return res;
 }
 
-export async function leaderboard() {
-    const prev_button = {
-        type: MessageComponentTypes.BUTTON,
-        style: ButtonStyleTypes.PRIMARY,
-        label: 'Back',
-        custom_id: 'back_button',
-        emoji: {
-            id: null,
-            name: '⬅️',
-        },
+/**
+ * 
+ * @param {LiveService} live_service 
+ * @param {JSON} track_info 
+ * @param {Number} [length=10]
+ * @param {Boolean} [onlyWorld=true]
+ * @param {Number} [offset=0]
+ * @returns {JSON}
+ */
+export async function leaderboard(live_service, track_info, length = 25, onlyWorld = true, offset = 0) {
+    let lb_info = {
+        positions: [],
+        accountIds: [],
+        times: [],
+    };
+    await live_service.getMapLeaderboard(track_info.customId, length, onlyWorld, offset)
+    .then(response => response.forEach(record => {
+        lb_info.positions.push(record.position);
+        lb_info.accountIds.push(record.accountId);
+        lb_info.times.push(`${convertMS(record.score)}`);
+    }));
+    //console.log(leaderboard);
+
+    let pages = [];
+    for (let i = 0; i < 25; i++) {
+        pages.push({
+            label: `Page ${((Number(offset)+(Number(length)*i))/Number(length))+1}`,
+            value: `${length};${onlyWorld};${Number(offset)+(Number(length)*i)}`,
+            description: `Leaderboard positions ${Number(offset)+(Number(length)*i)} - ${(Number(offset)+Number(length))+(Number(length)*i)}`,
+        });
+    }
+    
+    let records = [];
+    let s_accounts = [];
+    if (lb_info.accountIds.length > 0) {
+        const accounts = await fetchAccountName(lb_info.accountIds);
+        let field = {
+            name: `${lb_info.positions[0]} - ${lb_info.positions[lb_info.positions.length - 1]}`,
+            value: '```',
+            inline: true,
+        };
+        lb_info.accountIds.forEach((accountId, i) => {
+            field.value += `${lb_info.positions[i].toString().padStart(5)}: ${lb_info.times[i]} - ${accounts[accountId]}\n`;
+            s_accounts.push({
+                label: `${accounts[accountId]}`,
+                value: `${accountId}`,
+            });
+        });
+        field.value += '```';
+        records.push(field);
+    }
+    else {
+        records.push({
+            name: `no records available`,
+            value: `come back later :(`,
+            inline: true,
+        });
+    }
+
+    let buttons = [{
+                type: MessageComponentTypes.BUTTON,
+                style: ButtonStyleTypes.SECONDARY,
+                label: 'First',
+                custom_id: `lb_f;${track_info.customId};${length};${onlyWorld}`,
+                disabled: false,
+                emoji: {
+                    id: null,
+                    name: '⏪'
+                },
+            },{
+                type: MessageComponentTypes.BUTTON,
+                style: ButtonStyleTypes.SECONDARY,
+                label: 'Back',
+                custom_id: `lb;${track_info.customId};${length};${onlyWorld};${Number(offset)-Number(length)}`,
+                disabled: false,
+                emoji: {
+                    id: null,
+                    name: '⬅️',
+                },
+            },{
+                type: MessageComponentTypes.BUTTON,
+                style: ButtonStyleTypes.SECONDARY,
+                label: 'Next',
+                custom_id: `lb;${track_info.customId};${length};${onlyWorld};${Number(offset)+Number(length)}`,
+                disabled: false,
+                emoji: {
+                    id: null,
+                    name: '➡️',
+                },
+            },{
+                type: MessageComponentTypes.BUTTON,
+                style: ButtonStyleTypes.SECONDARY,
+                label: 'Last',
+                custom_id: `lb_l;${track_info.customId};${length};${onlyWorld}`,
+                disabled: false,
+                emoji: {
+                    id: null,
+                    name: '⏩'
+                },
+            }];
+    
+    if (Number(offset) === 0) buttons[0].disabled = true;
+    if (Number(offset)-Number(length) < 0) buttons[1].disabled = true;
+    if (Number(offset)+Number(length) >= 1000) buttons[2].disabled = true;
+    if (Number(offset) >= 1000-Number(length)) buttons[3].disabled = true;
+
+    const res = {
+        embeds: [{
+            author: { name: track_info.author, },
+            title: `Leaderboard`,
+            color: parseInt('ffffff', 16),
+            fields: records,
+        }],
+        components: [{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: buttons,
+        },{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [{
+                type: MessageComponentTypes.STRING_SELECT,
+                custom_id: 'acc;playerid',
+                placeholder: 'Search player info',
+                options: s_accounts,
+            }],
+        },{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [{
+                type: MessageComponentTypes.STRING_SELECT,
+                custom_id: `lb_p;${track_info.customId}`,
+                placeholder: 'Select page',
+                options: pages,
+            },],
+        },{
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [{
+                type: MessageComponentTypes.BUTTON,
+                style: ButtonStyleTypes.PRIMARY,
+                label: 'Track Info',
+                custom_id: `track;${track_info.mapUid}`,
+                emoji: {
+                    id: null,
+                    name: '🏁'
+                },
+            },],
+        },],
     };
 
-    const next_button = {
-        type: MessageComponentTypes.BUTTON,
-        style: ButtonStyleTypes.PRIMARY,
-        label: 'Next',
-        custom_id: 'next_button',
-        emoji: {
-            id: null,
-            name: '➡️',
-        },
-    };
+    return res;
 }

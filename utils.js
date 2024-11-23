@@ -53,7 +53,7 @@ export function convertMillisecondsToFormattedTime(milliseconds) {
         //hours.toString().padStart(2, '0'),
         minutes.toString().padStart(2, '0'),
         seconds.toString().padStart(2, '0'),
-        ms.toString().padStart(2, '0')
+        ms.toString().padStart(3, '0')
     ].join(':');
 
     return formattedTime;

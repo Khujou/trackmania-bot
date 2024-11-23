@@ -11,15 +11,71 @@ import {
 import * as schedule from 'node-schedule';
 import * as trackmania from './trackmania.js';
 import { DiscordRequest } from './utils.js';
+import { MongoClient, ServerApiVersion } from 'mongodb';
+import * as fs from 'fs';
+const uri = process.env.MONGODB_URI;
 
 // Create an express app
 const app = express();
 const PORT = process.env.PORT || 3000;
+const totdfile = 'totd.json';
+
+const client = new MongoClient(uri, {
+    serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+    }
+});
+
+async function run() {
+    try {
+        await client.connect();
+        await client.db('admin').command({ ping: 1});
+        console.log('Pinged your deployment. You successfully connected to MongoDB!');
+    } finally {
+        await client.close();
+    }
+}
+run().catch(console.dir);
+
+/*
+fs.open(totdfile, 'wx+', (err, fd) => {
+    if (err) {
+        if (err.code === 'EEXIST') {
+            console.error('totd.json exists');
+            return;
+        }
+        throw err;
+    }
+    try {
+        fs.writeFile(fd, JSON.stringify({
+            endTimestamp: 0,
+        }, null, 2), (err) => {
+            if (err) console.error(err);
+            else console.log('File created successfully');
+        });
+    } finally {
+        fs.close(fd, err => { if (err) throw err; });
+    }
+});
+*/
 
 const core_service = new trackmania.CoreService();
 const live_service = new trackmania.LiveService();
 const meet_service = new trackmania.MeetService();
 
+async function updateTOTDFile(filepath, callback) {
+    let json = await fs.promises.readFile(filepath, { encoding: 'utf8' }).then(data => JSON.parse(data));
+    if (json.endTimestamp < (Math.floor(Date.now() / 1000))) {
+        if (await fs.promises.writeFile(filepath, await callback.then(data => JSON.stringify(data, null, 2)), 'utf8') === undefined)
+            json = await fs.promises.readFile(filepath, { encoding: 'utf8' }).then(data => JSON.parse(data));
+    }
+    return json;
+}
+console.log(await updateTOTDFile(totdfile, trackmania.trackOfTheDay(core_service, live_service, new Date())));
+
+const startDate = new Date(2020, 6, 1);
 let totd_channel = '1183478764856942642';
 
 app.get('/', (req, res) => {
@@ -39,19 +95,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
     // Handle slash command requests
     if (type === InteractionType.APPLICATION_COMMAND) {
         const { name } = data;
-        const endpoint = `webhooks/${process.env.APP_ID}/${token}/messages/@original`;
-
-        if (name ==='tucker') {
-            res.send({
-                type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-            });
-            await DiscordRequest(endpoint, {
-                method: 'PATCH',
-                body: {
-                    content: 'i miss him <@203284058673774592>'
-                }
-            });
-        }
+        const postendpoint = `webhooks/${process.env.APP_ID}/${token}`;
+        const endpoint = `${postendpoint}/messages/@original`;
 
         if (name === 'test') {
             res.send({
@@ -83,10 +128,19 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                             text: 'bungus',
                             icon_url: 'https://media.discordapp.net/attachments/501929280729513994/1154607848437858374/image.png?ex=657bbc5a&is=6569475a&hm=1a8904ebb68181710d0d9808f20516b2f1f35ce1b09706af3e89a18915ca9f54&=&format=webp&quality=lossless',
                         },
+                        provider: {
+                            name: 'blehg',
+                            url: 'https://www.youtube.com',
+                        },
                     },],
                     components: [{
                         type: MessageComponentTypes.ACTION_ROW,
                         components: [{
+                            type: MessageComponentTypes.BUTTON,
+                            style: 1,
+                            label: 'test',
+                            custom_id: 'test_button',
+                        },{
                             type: MessageComponentTypes.BUTTON,
                             url: 'https://raw.githubusercontent.com/2qar/bigheadgeorge.github.io/master/ogdog.gif',
                             label: 'Click for win',
@@ -101,71 +155,119 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                     },
                     ],
                 }
-            })
-        } 
+            }).catch(err => embeddedErrorMessage(endpoint, err));
+        }
+
+        else if (name ==='tucker') {
+            try {
+                res.send({
+                    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                    data: {
+                        content: 'i miss him <@203284058673774592>',
+                        flags: InteractionResponseFlags.EPHEMERAL,
+                    },
+                });
+            } catch (err) {
+                embeddedErrorMessage(endpoint, err);
+            }
+        }
+
         else if (name === 'totd') {
-            console.log(req.body);
+
             res.send({
                 type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+                /* data: { flags: InteractionResponseFlags.EPHEMERAL, } */
             });
+
+            let track_json = null;
+            const totdDate = new Date();
+            if (data.options[0].name === 'past') {
+                let inputDate = new Date(data.options[0].options[0].value, data.options[0].options[1].value - 1, data.options[0].options[2].value);
+
+                if (inputDate > totdDate)
+                    inputDate = totdDate;
+                else if (inputDate < startDate)
+                    embeddedErrorMessage(endpoint, Error('Date given is before Trackmania came out, silly :)'));
+
+                track_json = await trackmania.trackOfTheDay(core_service, live_service, inputDate).catch(err => embeddedErrorMessage(endpoint, err));
+            } else {
+                console.log('about to open file');
+                track_json = await updateTOTDFile(totdfile, trackmania.trackOfTheDay(core_service, live_service, new Date())).catch(err => embeddedErrorMessage(endpoint, err));
+                console.log('finished file ops');
+            }
+
+            console.log(track_json);
+            
+            await DiscordRequest(endpoint, {
+                method: 'PATCH',
+                body: await trackmania.embedTrackInfo(live_service, track_json),
+            }).catch(err => embeddedErrorMessage(endpoint, err));
+
+        }
+
+    }
+
+    if (type === InteractionType.MESSAGE_COMPONENT) {
+        const componentId = data.custom_id;
+        const endpoint = `channels/${message.channel_id}/messages/${message.id}`;
+        const args = componentId.split(';');
+
+        res.send({
+            type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE,
+        });
+
+        if (args[0] === 'test') {
+            console.log(message);
+        }
+
+        else if (args[0] === 'cotd') {
+            const res = await trackmania.cupOfTheDay(meet_service);
+            console.log(res);
+        }
+
+        else if (args[0].slice(0,2) === 'lb') {
+            console.log(data);
+
+            const lbargs = args[0].split('_');
+            if (lbargs[1] === 'f') {
+                args.push(undefined)
+            } else if (lbargs[1] === 'l') {
+                args.push(1000-args[2]);
+            } else if (lbargs[1] === 'p') {
+                data.values[0].split(';').forEach((e) => {
+                    args.push(e);
+                });
+            }
+
+            console.log(args);
+
+            const track_info = {
+                customId: args[1].slice(0),
+                author: message.embeds[0].author.name,
+                mapUid: args[1].substr(41),
+            };
+            console.log(track_info);
+            try {
+                await DiscordRequest(endpoint, {
+                    method: 'PATCH',
+                    body: await trackmania.leaderboard(live_service, track_info, args[2], args[3], args[4]),
+                })
+            } catch (err) {
+                embeddedErrorMessage(endpoint, err);
+            }
+        }
+        
+        else if (args[0] === 'track') {
             try {
                 await DiscordRequest(endpoint, {
                     method: 'PATCH',
                     body: await trackmania.trackOfTheDay(core_service, live_service),
                 });
             } catch (err) {
-                await DiscordRequest(endpoint, {
-                    method: 'PATCH',
-                    body: {
-                        content: `Unable to complete request: ${err.stack}`,
-                    }
-                });
+                embeddedErrorMessage(endpoint, err);
             }
         }
 
-    }
-    if (type === InteractionType.MESSAGE_COMPONENT) {
-        const componentId = data.custom_id;
-
-        if (componentId === 'cotd_button') {
-            const endpoint = `channels/${message.channel_id}/messages/${message.id}`;
-
-            try {
-                await DiscordRequest(endpoint, { 
-                    method: 'PATCH',
-                    body: {
-                        content: 'epic failure this feature doesnt exist yet lolol',
-                        embeds: [],
-                        components: [{
-                            type: MessageComponentTypes.ACTION_ROW,
-                            components: [{
-                                type: MessageComponentTypes.BUTTON,
-                                style: ButtonStyleTypes.PRIMARY,
-                                label: 'Track of the Day',
-                                custom_id: 'totd_button',
-                                emoji: {
-                                    id: null,
-                                    name: '📋',
-                                },
-                            },],
-                        },],
-                    },
-                });
-            } catch (err) {
-                console.error(`Error sending message: ${err}`);
-            }
-        } else if (componentId === 'totd_button') {
-            const endpoint = `channels/${message.channel_id}/messages/${message.id}`;
-
-            try {
-                await DiscordRequest(endpoint, {
-                    method: 'PATCH',
-                    body: await trackmania.trackOfTheDay(core_service, live_service, InteractionResponseFlags.EPHEMERAL),
-                });
-            } catch (err) {
-                console.error(`Error sending message: ${err}`);
-            }
-        }
     }
 });
 
@@ -175,6 +277,37 @@ const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
         body: await trackmania.trackOfTheDay(core_service, live_service),
     });
 });
+
+async function embeddedErrorMessage(endpoint, err) {
+    console.log(err.stack);
+    try {
+        await DiscordRequest(endpoint, {
+            method: 'PATCH',
+            body: {
+                flags: InteractionResponseFlags.EPHEMERAL,
+                embeds: [{
+                    title: 'Error: Unable to handle request',
+                    color: parseInt('ff0000', 16),
+                    fields: [{
+                        name: 'Reason',
+                        value: `${err}`,
+                    }]
+                }],
+                components: [{
+                    type: MessageComponentTypes.ACTION_ROW,
+                    components: [{
+                        type: MessageComponentTypes.BUTTON,
+                        label: 'Back',
+                        style: ButtonStyleTypes.PRIMARY,
+                        custom_id: 'back',
+                    }],
+                }],
+            }
+        });
+    } catch (error) {
+        console.error(`Error sending error message: ${error}`);
+    }
+}
 
 
 app.listen(PORT, () => {
