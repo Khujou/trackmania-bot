@@ -123,6 +123,14 @@ export class FileBasedCachingAccessTokenProvider extends FileBasedCachingJSONDat
         super(filepath,
             (token) => {
                 try {
+                    /**
+		     * Don't re-process the expiry time if we've already put it
+		     * in the token. For Bearer tokens, this can cause our token
+		     * to never register as expired
+		     */
+                    if (token[TOKEN_EXPIRY_KEY] !== undefined) {
+                        return token;
+                    }
                     let expiryTime = undefined;
                     /**
 		     * Guess whether the token is a full JWT or just a bearer token
