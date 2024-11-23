@@ -191,8 +191,8 @@ class BaseService {
      * @returns {Promise<JSON>}
      */
     async fetchEndpoint(endpoint) {
-        console.log(`Fetching endpoint "${this.baseUrl + endpoint}"`);
         const finalEndpoint = this.baseUrl + endpoint;
+        console.log(`Fetching endpoint "${finalEndpoint}"`);
         return await fetch(finalEndpoint, {
             headers: await this.getRequestHeaders()
         })
