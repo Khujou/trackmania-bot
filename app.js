@@ -210,7 +210,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         }
 
         else if (args[0].slice(0,2) === 'lb') {
-            console.log(data);
 
             const lbargs = args[0].split('_');
             if (lbargs[1] === 'f') {
@@ -226,30 +225,33 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             console.log(args);
 
             const track_info = {
-                customId: args[1].slice(0),
                 author: message.embeds[0].author.name,
-                mapUid: args[1].substr(41),
+                groupUid: args[1],
+                mapUid: args[2],
             };
-            console.log(track_info);
-            try {
-                await DiscordRequest(endpoint, {
-                    method: 'PATCH',
-                    body: await trackmania.leaderboard(live_service, track_info, args[2], args[3], args[4]),
-                })
-            } catch (err) {
-                embeddedErrorMessage(endpoint, err);
-            }
+
+            await DiscordRequest(endpoint, {
+                method: 'PATCH',
+                body: await trackmania.leaderboard(live_service, track_info, args[3], true, args[4]),
+            })
+            .catch(err => {
+                console.error(JSON.stringify(err));
+                embeddedErrorMessage(endpoint, err)
+            });
         }
         
         else if (args[0] === 'track') {
-            try {
-                await DiscordRequest(endpoint, {
-                    method: 'PATCH',
-                    body: await trackmania.trackOfTheDay(core_service, live_service),
-                });
-            } catch (err) {
-                embeddedErrorMessage(endpoint, err);
-            }
+            let command;
+            if (args[1] === 'totd') command = `Track of the Day - ${args[4]}`;
+            else { command = 'Map Search'; }
+            
+            console.log(args);
+
+            await DiscordRequest(endpoint, {
+                method: 'PATCH',
+                body: await trackmania.embedTrackInfo(live_service, await trackmania.getTrackInfo(core_service, command, args[2], args[3])).catch(err => embeddedErrorMessage(endpoint, err)),
+            })
+            .catch(err => embeddedErrorMessage(endpoint, err));
         }
 
     }

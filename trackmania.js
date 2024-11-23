@@ -157,6 +157,12 @@ export class LiveService extends BaseService {
         super('https://live-services.trackmania.nadeo.live', 'NadeoLiveServices');
     }
 
+    /**
+     * 
+     * @param {number} offset 
+     * @param {number} day 
+     * @returns {JSON}
+     */
     async trackOfTheDay(offset, day) {
         const tracks_of_the_month = await this.fetchEndpoint(`/api/token/campaign/month?length=1&offset=${offset}`).then(response => response.monthList[0]);
         if (tracks_of_the_month.days[day - 1]?.relativeStart > 0) {
@@ -283,9 +289,9 @@ async function nadeoAuthentication(audience) {
  * @param {string} command 
  * @param {string} mapUid 
  * @param {string} [groupUid='Personal_Best']
- * @returns {JSON}
+ * @returns {Promise<JSON>}
  */
-export async function getTrackInfo(core_service, live_service, command, mapUid, groupUid = 'Personal_Best') {
+export async function getTrackInfo(core_service, command, mapUid, groupUid = 'Personal_Best') {
     
     const nadeo_map_info = await core_service.getMapInfo(undefined, mapUid).then(response => response[0]);
 
@@ -337,6 +343,8 @@ export async function getTrackInfo(core_service, live_service, command, mapUid, 
  */
 export async function embedTrackInfo(live_service, track_json) {
 
+    console.log(track_json);
+
     const medal_times = 
         `:first_place: ${await live_service.getMapLeaderboard(`${track_json.groupUid}/map/${track_json.mapUid}`, 1).then(response => convertMS(response[0].score))}\n` +
         `:green_circle: ${track_json.authortime}\n` +
@@ -381,7 +389,7 @@ export async function embedTrackInfo(live_service, track_json) {
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.PRIMARY,
                 label: 'Leaderboard',
-                custom_id: `lb;${track_json.groupUid}/map/${track_json.mapUid};25;true;0`,
+                custom_id: `lb;${track_json.groupUid};${track_json.mapUid};25;0`,
                 emoji: {
                     id: null,
                     name: '📋',
@@ -431,7 +439,7 @@ export async function trackOfTheDay(core_service, live_service, inputDate = new 
     const totd = await live_service.trackOfTheDay(offset, inputDate.getUTCDate());
     const command = `Track of the Day - ${dayOfTheWeek[totd.day]} ${monthOfTheYear[inputDate.getUTCMonth()]} ${totd.monthDay}, ${inputDate.getUTCFullYear()}`;
 
-    let track_info = await getTrackInfo(core_service, live_service, command, totd.mapUid, totd.seasonUid);
+    let track_info = await getTrackInfo(core_service, command, totd.mapUid, totd.seasonUid);
     track_info.endTimestamp = totd.endTimestamp;
     return track_info;
     
@@ -450,7 +458,7 @@ export async function cupOfTheDay(meet_service) {
  * @param {Number} [length=10]
  * @param {Boolean} [onlyWorld=true]
  * @param {Number} [offset=0]
- * @returns {JSON}
+ * @returns {Promise<JSON>}
  */
 export async function leaderboard(live_service, track_info, length = 25, onlyWorld = true, offset = 0) {
     let lb_info = {
@@ -458,19 +466,18 @@ export async function leaderboard(live_service, track_info, length = 25, onlyWor
         accountIds: [],
         times: [],
     };
-    await live_service.getMapLeaderboard(track_info.customId, length, onlyWorld, offset)
+    await live_service.getMapLeaderboard(`${track_info.groupUid}/map/${track_info.mapUid}`, length, onlyWorld, offset)
     .then(response => response.forEach(record => {
         lb_info.positions.push(record.position);
         lb_info.accountIds.push(record.accountId);
         lb_info.times.push(`${convertMS(record.score)}`);
     }));
-    //console.log(leaderboard);
 
     let pages = [];
     for (let i = 0; i < 25; i++) {
         pages.push({
             label: `Page ${((Number(offset)+(Number(length)*i))/Number(length))+1}`,
-            value: `${length};${onlyWorld};${Number(offset)+(Number(length)*i)}`,
+            value: `${length};${Number(offset)+(Number(length)*i)}`,
             description: `Leaderboard positions ${Number(offset)+(Number(length)*i)} - ${(Number(offset)+Number(length))+(Number(length)*i)}`,
         });
     }
@@ -506,7 +513,7 @@ export async function leaderboard(live_service, track_info, length = 25, onlyWor
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'First',
-                custom_id: `lb_f;${track_info.customId};${length};${onlyWorld}`,
+                custom_id: `lb_f;${track_info.groupUid};${track_info.mapUid};${length}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -516,7 +523,7 @@ export async function leaderboard(live_service, track_info, length = 25, onlyWor
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'Back',
-                custom_id: `lb;${track_info.customId};${length};${onlyWorld};${Number(offset)-Number(length)}`,
+                custom_id: `lb;${track_info.groupUid};${track_info.mapUid};${length};${Number(offset)-Number(length)}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -526,7 +533,7 @@ export async function leaderboard(live_service, track_info, length = 25, onlyWor
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'Next',
-                custom_id: `lb;${track_info.customId};${length};${onlyWorld};${Number(offset)+Number(length)}`,
+                custom_id: `lb;${track_info.groupUid};${track_info.mapUid};${length};${Number(offset)+Number(length)}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -536,7 +543,7 @@ export async function leaderboard(live_service, track_info, length = 25, onlyWor
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'Last',
-                custom_id: `lb_l;${track_info.customId};${length};${onlyWorld}`,
+                custom_id: `lb_l;${track_info.groupUid};${track_info.mapUid};${length}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -563,7 +570,7 @@ export async function leaderboard(live_service, track_info, length = 25, onlyWor
             type: MessageComponentTypes.ACTION_ROW,
             components: [{
                 type: MessageComponentTypes.STRING_SELECT,
-                custom_id: 'acc;playerid',
+                custom_id: 'acc',
                 placeholder: 'Search player info',
                 options: s_accounts,
             }],
@@ -571,7 +578,7 @@ export async function leaderboard(live_service, track_info, length = 25, onlyWor
             type: MessageComponentTypes.ACTION_ROW,
             components: [{
                 type: MessageComponentTypes.STRING_SELECT,
-                custom_id: `lb_p;${track_info.customId}`,
+                custom_id: `lb_p;${track_info.groupUid};${track_info.mapUid}`,
                 placeholder: 'Select page',
                 options: pages,
             },],
@@ -581,7 +588,7 @@ export async function leaderboard(live_service, track_info, length = 25, onlyWor
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.PRIMARY,
                 label: 'Track Info',
-                custom_id: `track;${track_info.mapUid}`,
+                custom_id: `track;totd;${track_info.mapUid};${track_info.groupUid};${track_info.author.split('-')[1].slice(1)}`,
                 emoji: {
                     id: null,
                     name: '🏁'
