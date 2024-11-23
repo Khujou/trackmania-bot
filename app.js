@@ -39,26 +39,16 @@ async function run() {
 }
 run().catch(console.dir);
 
-const core_service = new trackmania.CoreService();
-const live_service = new trackmania.LiveService();
-const meet_service = new trackmania.MeetService();
+const tokenProviderFactory = (identifier, fetchFunction) =>
+        new trackmania.FileBasedCachingAccessTokenProvider(`accessToken-${identifier}.json`, fetchFunction);
+const trackmaniaFacade = new trackmania.TrackmaniaFacade(tokenProviderFactory);
 
-/**
- * Returns up-to-date TOTD info. Checks if stored TOTD info is out of date and replaces with up-to-date info.
- * @param {string} filepath 
- * @param {Promise<JSON>} callback 
- * @returns {Promise<JSON>}
- */
-async function getUpToDateTOTDInfo(filepath, callback) {
-    let json = await fs.promises.readFile(filepath, { encoding: 'utf8' }).then(data => JSON.parse(data));
-    if (json.endTimestamp < (Math.floor(Date.now() / 1000))) {
-        if (await fs.promises.writeFile(filepath, await callback.then(data => JSON.stringify(data, null, 2)), 'utf8') === undefined)
-            json = await fs.promises.readFile(filepath, { encoding: 'utf8' }).then(data => JSON.parse(data));
-    }
-    return json;
-}
-
-console.log(await getUpToDateTOTDInfo(totdfile, trackmania.trackOfTheDay(core_service, live_service)));
+// Returns up-to-date TOTD info. Checks if stored TOTD info is out of date and replaces with up-to-date info.
+const cachingTOTDProvider = new trackmania.FileBasedCachingJSONDataProvider('totd.json',
+    undefined,
+    (trackInfo) => trackInfo.endTimestamp < (Math.floor(Date.now() / 1000)),
+    () => trackmaniaFacade.trackOfTheDay());
+console.log(await cachingTOTDProvider.getData());
 
 const startDate = new Date(2020, 6, 1);
 let totd_channel = '1183478764856942642';
@@ -173,10 +163,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 else if (inputDate < startDate)
                     embeddedErrorMessage(endpoint, Error('Date given is before Trackmania came out, silly :)'));
 
-                track_json = await trackmania.trackOfTheDay(core_service, live_service, inputDate).catch(err => embeddedErrorMessage(endpoint, err));
+                track_json = await trackmaniaFacade.trackOfTheDay(inputDate).catch(err => embeddedErrorMessage(endpoint, err));
             } else {
                 console.log('about to open file');
-                track_json = await getUpToDateTOTDInfo(totdfile, trackmania.trackOfTheDay(core_service, live_service)).catch(err => embeddedErrorMessage(endpoint, err));
+                track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
                 console.log('finished file ops');
             }
 
@@ -184,7 +174,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
-                body: await trackmania.embedTrackInfo(live_service, track_json),
+                body: await trackmania.embedTrackInfo(trackmaniaFacade.liveService, track_json),
             })
             .catch(err => embeddedErrorMessage(endpoint, err));
         }
@@ -205,7 +195,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         }
 
         else if (args[0] === 'cotd') {
-            const res = await trackmania.cupOfTheDay(meet_service);
+            const res = await trackmaniaFacade.cupOfTheDay();
             console.log(res);
         }
 
@@ -232,7 +222,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
-                body: await trackmania.leaderboard(live_service, track_info, args[3], true, args[4]),
+                body: await trackmania.leaderboard(trackmaniaFacade.liveService,
+                    trackmaniaFacade.oauthService, track_info, args[3], true, args[4]),
             })
             .catch(err => {
                 console.error(JSON.stringify(err));
@@ -249,7 +240,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
-                body: await trackmania.embedTrackInfo(live_service, await trackmania.getTrackInfo(core_service, command, args[2], args[3])).catch(err => embeddedErrorMessage(endpoint, err)),
+                body: await trackmania.embedTrackInfo(trackmaniaFacade.liveService,
+                    await trackmaniaFacade.getTrackInfo(command, args[2], args[3]))
+                        .catch(err => embeddedErrorMessage(endpoint, err)),
             })
             .catch(err => embeddedErrorMessage(endpoint, err));
         }
@@ -260,7 +253,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
     await DiscordRequest(`channels/${totd_channel}/messages`, {
         method: 'POST',
-        body: await trackmania.trackOfTheDay(core_service, live_service),
+        body: await trackmaniaFacade.trackOfTheDay(),
     });
 });
 

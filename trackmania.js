@@ -66,43 +66,96 @@ const map_tags = [
 const dayOfTheWeek = ['Mon.', 'Tue.', 'Wed.', 'Thur.', 'Fri.', 'Sat.', 'Sun.'];
 const monthOfTheYear = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-async function getUpToDateNadeoAuthToken(filepath, callback, audience) {
-    let filehandle;
-    filehandle = await fs.promises.open(filepath, 'r+', 0o666)
-    .catch(async err => {
-        console.error(err);
-        await fs.promises.writeFile(filepath, JSON.stringify({ 
-            'NadeoServices': { expirationTime: 0 },
-            'NadeoLiveServices': { expirationTime: 0 },
-            'NadeoClubServices': { expirationTime: 0 },
-        }, null, 2), 'utf8');
-    });
-    let token = await fs.promises.readFile(filepath, { encoding: 'utf8' }).then(data => JSON.parse(data));
-    if (token[audience].expirationTime < (Math.floor(Date.now() / 1000)) ) {
-        console.log('retrieving new token');
-        const at = await callback(audience);
-        const unencoded_at = JSON.parse(atob(at.accessToken.split('.')[1]));
-        token[audience] = {
-            'accessToken': at.accessToken,
-            'refreshToken': at.refreshToken,
-            'refreshTime': unencoded_at.rat,
-            'expirationTime': unencoded_at.exp
-        };
-        fs.promises.writeFile(filepath, JSON.stringify(token, null, 2), 'utf8');
+export class FileBasedCachingDataProvider {
+    /**
+     * @param {filepath} file path to read/write the cached result
+     * @param {deserializeFunction}
+     * @param {postProcessFunction} (optional) function to run after retrieving the data either from file or from fetching
+     * @param {serializeFunction}
+     * @param {expiredPredicate} predicate function to check whether the data is expired
+     * @param {fetchFunction} lazily invoked when the cached data is expired
+     */
+    constructor(filepath, deserializeFunction, postProcessFunction, serializeFunction, expiredPredicate, fetchFunction) {
+        this.filepath = filepath;
+        this.deserializeFunction = deserializeFunction;
+        this.postProcessFn = postProcessFunction ?? (d => d);
+        this.serializeFunction = serializeFunction;
+        this.expiredPredicate = expiredPredicate;
+        this.fetchFunction = fetchFunction;
+        this.data = null;
     }
-    filehandle.close().catch(err => console.log(`wtf ${err}`));
-    return token[audience];
+
+    async getData() {
+        if (this.data == null) {
+            this.data = await fs.promises.readFile(this.filepath, { encoding: 'utf8' })
+                .then((data) => this.postProcessFn(this.deserializeFunction(data)))
+		.catch(err => {
+                    console.log(err);
+                    return null;
+		});
+	}
+        if (this.data == null || this.expiredPredicate(this.data)) {
+            this.data = this.postProcessFn(await this.fetchFunction());
+            await fs.promises.writeFile(this.filepath, this.serializeFunction(this.data), 'utf8');
+	}
+        return this.data;
+    }
+}
+
+export class FileBasedCachingJSONDataProvider extends FileBasedCachingDataProvider {
+    /**
+     * @param {postProcessFunction} (optional) transform to run on the JSON after parsing
+     */
+    constructor(filepath, postProcessFunction, expiredPredicate, fetchFunction) {
+        super(filepath,
+	    JSON.parse,
+            postProcessFunction,
+            (data) => JSON.stringify(data, null, 2),
+            expiredPredicate,
+            fetchFunction);
+    }
+}
+
+const TOKEN_EXPIRY_KEY = 'expiryTime';
+
+export class FileBasedCachingAccessTokenProvider extends FileBasedCachingJSONDataProvider {
+    constructor(filepath, fetchFunction) {
+        super(filepath,
+            (token) => {
+                try {
+                    let expiryTime = undefined;
+                    /**
+		     * Guess whether the token is a full JWT or just a bearer token
+		     * based on the access token field name
+		     */
+                    if (token['access_token'] !== undefined) {
+                        expiryTime = token['expires_in'] + new Date() / 1000;
+                    } else {
+                        expiryTime = JSON.parse(atob(token['accessToken'].split('.')[1]))['exp'];
+		    }
+                    token[TOKEN_EXPIRY_KEY] = Math.floor(expiryTime ?? 0);
+		} catch (err) {
+                    console.error('Unable to determine expiry key for token', err);
+                }
+                return token;
+            },
+            (token) => token[TOKEN_EXPIRY_KEY] < new Date() / 1000,
+            fetchFunction);
+    }
+
+    async getToken() {
+        return this.getData();
+    }
 }
 
 class BaseService {
     /**
-     * sets the url and audience for this service
-     * @param {string} url 
-     * @param {string} audience 
+     * @param {baseUrl} base url for API calls
+     * @param {tokenProvider} provider for JWT tokens
      */
-    constructor(url, audience) {
-        this.url = url;
-        this.audience = audience;
+    constructor(baseUrl, tokenProvider) {
+        this.baseUrl = baseUrl;
+        this.tokenProvider = tokenProvider;
     }
 
     /**
@@ -110,7 +163,18 @@ class BaseService {
      * @returns {Promise<JSON>}
      */
     async getAccessToken() {
-        return await getUpToDateNadeoAuthToken('nadeoAuthToken.json', nadeoAuthentication, this.audience);
+        return (await this.tokenProvider.getToken()).accessToken;
+    }
+
+    async getAuthorization() {
+        throw new Error("OVERRIDE ME");
+    }
+
+    async getRequestHeaders() {
+        return {
+            "User-Agent": 'trackmania-bot Discord Bot : https://github.com/Khujou/trackmania-bot',
+            Authorization: await this.getAuthorization(),
+        }
     }
 
     /**
@@ -119,22 +183,61 @@ class BaseService {
      * @returns {Promise<JSON>}
      */
     async fetchEndpoint(endpoint) {
-        return await fetch(this.url + endpoint, {
-            headers: {
-                "User-Agent": 'trackmania-bot Discord Bot : https://github.com/Khujou/trackmania-bot',
-                Authorization: `nadeo_v1 t=${await this.getAccessToken().then(response => response.accessToken)}`,
-            }
+        console.log(`Fetching endpoint "${this.baseUrl + endpoint}"`);
+        const finalEndpoint = this.baseUrl + endpoint;
+        return await fetch(finalEndpoint, {
+            headers: await this.getRequestHeaders()
         })
         .then(async res => await res.json())
         .catch(err => {
-            console.error(err);
+            console.error(`Error fetching "${finalEndpoint}": `, err);
         });
     }
 }
 
-export class CoreService extends BaseService {
-    constructor() {
-        super('https://prod.trackmania.core.nadeo.online', 'NadeoServices');
+class BaseNadeoService extends BaseService {
+    constructor(url, audience, tokenProviderFactory) {
+        super(url, tokenProviderFactory(audience, () => this.fetchAccessToken()));
+        this.audience = audience;
+    }
+
+
+    /**
+     * receives authentication token from official nadeo API
+     * @returns {Promise<JSON>}
+     */
+    async fetchAccessToken() {
+        const url = 'https://prod.trackmania.core.nadeo.online/v2/authentication/token/basic';
+        const login_password_base64 = btoa(Buffer.from(`${process.env.TM_SERVER_ACC_LOGIN}:${process.env.TM_SERVER_ACC_PASSWORD}`));
+
+        return await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Basic ${login_password_base64}`,
+            },
+            body: JSON.stringify({
+                'audience': this.audience
+            }),
+        })
+        .then(response => response.json())
+        .catch(err => {
+            console.log(err);
+            return;
+	});
+    }
+
+    async getAuthorization() {
+        return `nadeo_v1 t=${await this.getAccessToken()}`
+    }
+}
+
+/**
+ * Covers Core API endpoints. Reference docs: https://webservices.openplanet.dev/core
+ */
+export class CoreService extends BaseNadeoService {
+    constructor(tokenProviderFactory) {
+        super('https://prod.trackmania.core.nadeo.online', 'NadeoServices', tokenProviderFactory);
     }
 
     async getMapInfo(mapIdList = undefined, mapUidList = undefined) {
@@ -152,9 +255,12 @@ export class CoreService extends BaseService {
     }
 }
 
-export class LiveService extends BaseService {
-    constructor() {
-        super('https://live-services.trackmania.nadeo.live', 'NadeoLiveServices');
+/**
+ * Live API endpoints. Docs: https://webservices.openplanet.dev/live
+ */
+export class LiveService extends BaseNadeoService {
+    constructor(tokenProviderFactory) {
+        super('https://live-services.trackmania.nadeo.live', 'NadeoLiveServices', tokenProviderFactory);
     }
 
     /**
@@ -186,9 +292,12 @@ export class LiveService extends BaseService {
     }
 }
 
-export class MeetService extends BaseService {
-    constructor() {
-        super('https://meet.trackmania.nadeo.club', 'NadeoClubServices');
+/**
+ * Meet API endpoints. Docs: https://webservices.openplanet.dev/meet
+ */
+export class MeetService extends BaseNadeoService {
+    constructor(tokenProviderFactory) {
+        super('https://meet.trackmania.nadeo.club', 'NadeoClubServices', tokenProviderFactory);
     }
 
     async cupOfTheDay() {
@@ -198,143 +307,159 @@ export class MeetService extends BaseService {
 }
 
 /**
- * 
- * @param {JSON} account_id_list 
- * @returns {Promise<JSON>}
+ * Covers endpoints in Trackmania's OAuth API:
+ * https://webservices.openplanet.dev/oauth/summary
+ *
+ * Endpoint reference: https://webservices.openplanet.dev/oauth/reference
  */
-async function fetchAccountName(account_id_list) {
-    const token = await fetch('https://api.trackmania.com/api/access_token', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: `grant_type=client_credentials&client_id=${process.env.TM_OAUTH2_CLIENT_ID}&client_secret=${process.env.TM_OAUTH2_CLIENT_SECRET}`
-    }).then(response => response.json());
-
-    let endpoint = `https://api.trackmania.com/api/display-names`;
-    account_id_list.forEach((account_id, i) => {
-        if (i === 0) endpoint += '?';
-        else endpoint += '&';
-        endpoint += `accountId[]=${account_id}`
-    });
-
-    return await fetch(endpoint, {
-        headers: {
-            Authorization: `Bearer ${token.access_token}`,
-        },
-    }).then(response => response.json());
-}
-
-/**
- * fetches info from API endpoint from trackmania.exchange website
- * @param {string} endpoint 
- * @returns {Promise<JSON>}
- */
-async function fetchManiaExchange(endpoint) {
-    const res = await fetch('https://trackmania.exchange' + endpoint, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; DiscordBot/0.1)',
-        }
-    })
-
-    if (!res.ok) {
-        const data = await res.json();
-        console.log(`epic failure ${res.status}`);
-        throw new Error(JSON.stringify(data));
+export class TrackmaniaOAuthService extends BaseService {
+    constructor(tokenProviderFactory) {
+        super('https://api.trackmania.com',
+            tokenProviderFactory('trackmania', () => this.fetchAccessToken()));
     }
 
-    return res.json();
-}
-
-/**
- * receives authentication token from official nadeo API
- * @param {string} audience 
- * @returns {Promise<JSON>}
- */
-async function nadeoAuthentication(audience) {
-    const url = 'https://prod.trackmania.core.nadeo.online/v2/authentication/token/basic';
-    const login_password_base64 = btoa(Buffer.from(`${process.env.TM_SERVER_ACC_LOGIN}:${process.env.TM_SERVER_ACC_PASSWORD}`));
-
-    try {
-        return await fetch(url, {
+    async fetchAccessToken() {
+        return await fetch(`${this.baseUrl}/api/access_token`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Basic ${login_password_base64}`,
-            },
-            body: JSON.stringify({
-                'audience':`${audience}`,
-            }),
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: `grant_type=client_credentials&client_id=${process.env.TM_OAUTH2_CLIENT_ID}&client_secret=${process.env.TM_OAUTH2_CLIENT_SECRET}`
         }).then(response => response.json());
-    } catch (err) {
-        console.log(err);
-        return;
-    }
-    
-    /*
-    console.log(res);
-
-    if (!res.ok) {
-        const data = res;
-        console.log(`epic fail ${res.status}`);
-        throw new Error(JSON.stringify(data));
-    }
-
-    return res;
-    */
-}
-
-/**
- * 
- * @param {CoreService} core_service 
- * @param {LiveService} live_service 
- * @param {string} command 
- * @param {string} mapUid 
- * @param {string} [groupUid='Personal_Best']
- * @returns {Promise<JSON>}
- */
-export async function getTrackInfo(core_service, command, mapUid, groupUid = 'Personal_Best') {
-    
-    const nadeo_map_info = await core_service.getMapInfo(undefined, mapUid).then(response => response[0]);
-
-    let track_json = {
-        command: command,
-        title: nadeo_map_info.filename.slice(0,-8),
-        author: null,
-        authortime: convertMS(nadeo_map_info.authorScore),
-        goldtime: convertMS(nadeo_map_info.goldScore),
-        tags: null,
-        website: null,
-        stylename: 0,
-        thumbnail: nadeo_map_info.thumbnailUrl,
-        groupUid: groupUid,
-        mapUid: mapUid,
     }
 
     /**
-     * Tries to find the track on trackmania.exchange. If it can, updates attributes of map
-     * with attributes from trackmania.exchange. If it cannot, only updates the Username attribute
-     * of map by using an API from Nadeo.
+     * prop name for access token is 'access_token' in TM OAuth API, so need to
+     * override this method
      */
-    await fetchManiaExchange(`/api/maps/get_map_info/uid/${mapUid}`)
-    .then(response => {
-        track_json.title = response.Name
-        track_json.author = response.Username;
-        track_json.tags = response.Tags;
-        track_json.website = `https://trackmania.exchange/s/tr/${response.TrackID}`;
-        track_json.stylename = parseInt(map_tags.find(tag => tag.Name === response.StyleName)?.Color, 16);
-    })
-    .catch(async err => {
-        console.error('Couldn\'t retrieve data from trackmania.exchange:', err);
-        track_json.author = await fetchAccountName([nadeo_map_info.author])
-        .then(response => response[nadeo_map_info.author])
-        .catch(err => {
-            console.log('Can\'t get author WTF');
-            console.error(err);
-            track_json.author = nadeo_map_info.author;
-        });
-    });
+    async getAccessToken() {
+        return (await this.tokenProvider.getToken()).access_token;
+    }
 
-    return track_json;
+    async getAuthorization() {
+        return `Bearer ${await this.getAccessToken()}`
+    }
+
+    /**
+     * https://webservices.openplanet.dev/oauth/reference/accounts/id-to-name
+     *
+     * @param {Array<String>} account_ids
+     * @returns {Promise<JSON>}
+     */
+    async fetchAccountNames(account_ids) {
+        const endpoint = '/api/display-names?'
+	    + account_ids
+		.map(account_id => `accountId[]=${account_id}`)
+	        .join('&');
+	return this.fetchEndpoint(endpoint);
+    }
 }
+
+/**
+ * Fetches info from API endpoints on trackmania.exchange website
+ */
+export class TrackmaniaExchangeService extends BaseService {
+    constructor() {
+        super('https://trackmania.exchange', undefined);
+    }
+
+    async getRequestHeaders() {
+        return {
+            'User-Agent': 'Mozilla/5.0 (compatible; DiscordBot/0.1)',
+        };
+    }
+
+    async getMapInfo(mapUid) {
+        return this.fetchEndpoint(`/api/maps/get_map_info/uid/${mapUid}`);
+    }
+}
+
+export class TrackmaniaFacade {
+    constructor(tokenProviderFactory) {
+        this.coreService = new CoreService(tokenProviderFactory);
+        this.liveService = new LiveService(tokenProviderFactory);
+        this.meetService = new MeetService(tokenProviderFactory);
+        this.oauthService = new TrackmaniaOAuthService(tokenProviderFactory);
+        this.exchangeService = new TrackmaniaExchangeService();
+    }
+
+    /**
+     *
+     * @param {Date} [inputDate=new Date()]
+     * @returns {Promise<JSON>}
+     */
+    async trackOfTheDay(inputDate = new Date()) {
+        /**
+         * Obtain track of the day information, then display the track name,
+         * the track author, the track thumbnail, the times for the medals,
+         * the style of the track (using trackmania.exchange), and the leaderboard.
+         */
+        const currDate = new Date();
+        const offset = ((currDate.getUTCFullYear() - inputDate.getUTCFullYear()) * 12) + ((currDate.getUTCMonth()) - inputDate.getUTCMonth());
+        const totd = await this.liveService.trackOfTheDay(offset, inputDate.getUTCDate());
+        const command = `Track of the Day - ${dayOfTheWeek[totd.day]} ${monthOfTheYear[inputDate.getUTCMonth()]} ${totd.monthDay}, ${inputDate.getUTCFullYear()}`;
+    
+        let track_info = await this.getTrackInfo(command, totd.mapUid, totd.seasonUid);
+        track_info.endTimestamp = totd.endTimestamp;
+        return track_info;
+    }
+
+    /**
+     *
+     * @param {string} command
+     * @param {string} mapUid
+     * @param {string} [groupUid='Personal_Best']
+     * @returns {JSON}
+     */
+    async getTrackInfo(command, mapUid, groupUid = 'Personal_Best') {
+        const nadeo_map_info = await this.coreService.getMapInfo(undefined, mapUid).then(response => response[0]);
+
+        let track_json = {
+            command: command,
+            title: nadeo_map_info.filename.slice(0,-8),
+            author: null,
+            authortime: convertMS(nadeo_map_info.authorScore),
+            goldtime: convertMS(nadeo_map_info.goldScore),
+            tags: null,
+            website: null,
+            stylename: 0,
+            thumbnail: nadeo_map_info.thumbnailUrl,
+            groupUid: groupUid,
+            mapUid: mapUid,
+        }
+
+        /**
+         * Tries to find the track on trackmania.exchange. If it can, updates attributes of map
+         * with attributes from trackmania.exchange. If it cannot, only updates the Username attribute
+         * of map by using an API from Nadeo.
+         */
+        await this.exchangeService.getMapInfo(mapUid)
+        .then(response => {
+            track_json.title = response.Name
+            track_json.author = response.Username;
+            track_json.tags = response.Tags;
+            track_json.website = `https://trackmania.exchange/s/tr/${response.TrackID}`;
+            track_json.stylename = parseInt(map_tags.find(tag => tag.Name === response.StyleName)?.Color, 16);
+        })
+        .catch(async err => {
+            console.error('Couldn\'t retrieve data from trackmania.exchange:', err);
+            track_json.author = await this.oauthService.fetchAccountNames([nadeo_map_info.author])
+            .then(response => response[nadeo_map_info.author])
+            .catch(err => {
+                console.log('Can\'t get author WTF');
+                console.error(err);
+                track_json.author = nadeo_map_info.author;
+            });
+        });
+
+        return track_json;
+    }
+
+    async cupOfTheDay() {
+        let res = await this.meet_service.cupOfTheDay();
+        console.log(res);
+        return res;
+    }
+}
+
 
 /**
  * creates a discord-compatible json using parsed info from Nadeo and Trackmania.Exchange
@@ -422,37 +547,6 @@ export function embedLeaderboardInfo() {
 
 }
 
-/**
- * 
- * @param {CoreService} core_service 
- * @param {LiveService} live_service 
- * @param {Date} [inputDate=new Date()]
- * @returns {Promise<JSON>}
- */
-export async function trackOfTheDay(core_service, live_service, inputDate = new Date()) {
-    /**
-     * Obtain track of the day information, then display the track name, 
-     * the track author, the track thumbnail, the times for the medals,
-     * the style of the track (using trackmania.exchange), and the leaderboard.
-     * 
-     * TEMPORARY FILE to CACHE totd data for the day once requested
-     */
-    const currDate = new Date();
-    const offset = ((currDate.getUTCFullYear() - inputDate.getUTCFullYear()) * 12) + ((currDate.getUTCMonth()) - inputDate.getUTCMonth());
-    const totd = await live_service.trackOfTheDay(offset, inputDate.getUTCDate());
-    const command = `Track of the Day - ${dayOfTheWeek[totd.day]} ${monthOfTheYear[inputDate.getUTCMonth()]} ${totd.monthDay}, ${inputDate.getUTCFullYear()}`;
-
-    let track_info = await getTrackInfo(core_service, command, totd.mapUid, totd.seasonUid);
-    track_info.endTimestamp = totd.endTimestamp;
-    return track_info;
-    
-}
-
-export async function cupOfTheDay(meet_service) {
-    let res = await meet_service.cupOfTheDay();
-    console.log(res);
-    return res;
-}
 
 /**
  * 
@@ -463,7 +557,7 @@ export async function cupOfTheDay(meet_service) {
  * @param {Number} [offset=0]
  * @returns {Promise<JSON>}
  */
-export async function leaderboard(live_service, track_info, length = 25, onlyWorld = true, offset = 0) {
+export async function leaderboard(live_service, oauth_service, track_info, length = 25, onlyWorld = true, offset = 0) {
     let lb_info = {
         positions: [],
         accountIds: [],
@@ -488,7 +582,7 @@ export async function leaderboard(live_service, track_info, length = 25, onlyWor
     let records = [];
     let s_accounts = [];
     if (lb_info.accountIds.length > 0) {
-        const accounts = await fetchAccountName(lb_info.accountIds);
+        const accounts = await oauth_service.fetchAccountNames(lb_info.accountIds);
         let field = {
             name: `${lb_info.positions[0]} - ${lb_info.positions[lb_info.positions.length - 1]}`,
             value: '```',
