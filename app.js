@@ -213,9 +213,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
             const lbargs = args[0].split('_');
             if (lbargs[1] === 'f') {
-                args.push(undefined)
+                args.push(0)
             } else if (lbargs[1] === 'l') {
-                args.push(1000-args[2]);
+                args.push(1000-args[3]);
             } else if (lbargs[1] === 'p') {
                 data.values[0].split(';').forEach((e) => {
                     args.push(e);
