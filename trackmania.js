@@ -68,12 +68,12 @@ const monthOfTheYear = ['January', 'February', 'March', 'April', 'May', 'June', 
 
 export class FileBasedCachingDataProvider {
     /**
-     * @param {filepath} file path to read/write the cached result
-     * @param {deserializeFunction}
-     * @param {postProcessFunction} (optional) function to run after retrieving the data either from file or from fetching
-     * @param {serializeFunction}
-     * @param {expiredPredicate} predicate function to check whether the data is expired
-     * @param {fetchFunction} lazily invoked when the cached data is expired
+     * @param {filepath} filepath path to read/write the cached result
+     * @param {callbackfn} deserializeFunction
+     * @param {callbackfn} postProcessFunction (optional) function to run after retrieving the data either from file or from fetching
+     * @param {callbackfn} serializeFunction
+     * @param {callbackfn} expiredPredicate function to check whether the data is expired
+     * @param {callbackfn} fetchFunction invoked when the cached data is expired
      */
     constructor(filepath, deserializeFunction, postProcessFunction, serializeFunction, expiredPredicate, fetchFunction) {
         this.filepath = filepath;
@@ -88,23 +88,23 @@ export class FileBasedCachingDataProvider {
     async getData() {
         if (this.data == null) {
             this.data = await fs.promises.readFile(this.filepath, { encoding: 'utf8' })
-                .then((data) => this.postProcessFn(this.deserializeFunction(data)))
-		.catch(err => {
-                    console.log(err);
-                    return null;
-		});
-	}
+            .then((data) => this.postProcessFn(this.deserializeFunction(data)))
+		    .catch(err => {
+                console.log(err);
+                return null;
+		    });
+	    }
         if (this.data == null || this.expiredPredicate(this.data)) {
             this.data = this.postProcessFn(await this.fetchFunction());
             await fs.promises.writeFile(this.filepath, this.serializeFunction(this.data), 'utf8');
-	}
+	    }
         return this.data;
     }
 }
 
 export class FileBasedCachingJSONDataProvider extends FileBasedCachingDataProvider {
     /**
-     * @param {postProcessFunction} (optional) transform to run on the JSON after parsing
+     * @param {callbackfn} postProcessFunction (optional) transform to run on the JSON after parsing
      */
     constructor(filepath, postProcessFunction, expiredPredicate, fetchFunction) {
         super(filepath,
@@ -124,25 +124,25 @@ export class FileBasedCachingAccessTokenProvider extends FileBasedCachingJSONDat
             (token) => {
                 try {
                     /**
-		     * Don't re-process the expiry time if we've already put it
-		     * in the token. For Bearer tokens, this can cause our token
-		     * to never register as expired
-		     */
+                     * Don't re-process the expiry time if we've already put it
+                     * in the token. For Bearer tokens, this can cause our token
+                     * to never register as expired
+                     */
                     if (token[TOKEN_EXPIRY_KEY] !== undefined) {
                         return token;
                     }
                     let expiryTime = undefined;
                     /**
-		     * Guess whether the token is a full JWT or just a bearer token
-		     * based on the access token field name
-		     */
+                     * Guess whether the token is a full JWT or just a bearer token
+                     * based on the access token field name
+                     */
                     if (token['access_token'] !== undefined) {
                         expiryTime = token['expires_in'] + new Date() / 1000;
                     } else {
                         expiryTime = JSON.parse(atob(token['accessToken'].split('.')[1]))['exp'];
 		    }
                     token[TOKEN_EXPIRY_KEY] = Math.floor(expiryTime ?? 0);
-		} catch (err) {
+		        } catch (err) {
                     console.error('Unable to determine expiry key for token', err);
                 }
                 return token;
@@ -158,8 +158,8 @@ export class FileBasedCachingAccessTokenProvider extends FileBasedCachingJSONDat
 
 class BaseService {
     /**
-     * @param {baseUrl} base url for API calls
-     * @param {tokenProvider} provider for JWT tokens
+     * @param {baseUrl} baseUrl url for API calls
+     * @param {tokenProvider} tokenProvider for JWT tokens
      */
     constructor(baseUrl, tokenProvider) {
         this.baseUrl = baseUrl;
@@ -353,11 +353,10 @@ export class TrackmaniaOAuthService extends BaseService {
      * @returns {Promise<JSON>}
      */
     async fetchAccountNames(account_ids) {
-        const endpoint = '/api/display-names?'
-	    + account_ids
+        const query = account_ids
 		.map(account_id => `accountId[]=${account_id}`)
-	        .join('&');
-	return this.fetchEndpoint(endpoint);
+	    .join('&');
+	    return this.fetchEndpoint(`/api/display-names?${query}`);
     }
 }
 
@@ -415,7 +414,7 @@ export class TrackmaniaFacade {
      * @param {string} command
      * @param {string} mapUid
      * @param {string} [groupUid='Personal_Best']
-     * @returns {JSON}
+     * @returns {Promise<JSON>}
      */
     async getTrackInfo(command, mapUid, groupUid = 'Personal_Best') {
         const nadeo_map_info = await this.coreService.getMapInfo(undefined, mapUid).then(response => response[0]);
@@ -462,7 +461,7 @@ export class TrackmaniaFacade {
     }
 
     async cupOfTheDay() {
-        let res = await this.meet_service.cupOfTheDay();
+        let res = await this.meetService.cupOfTheDay();
         console.log(res);
         return res;
     }
@@ -475,8 +474,6 @@ export class TrackmaniaFacade {
  * @returns {Promise<JSON>}
  */
 export async function embedTrackInfo(live_service, track_json) {
-
-    console.log(track_json);
 
     const medal_times = 
         `:first_place: ${await live_service.getMapLeaderboard(`${track_json.groupUid}/map/${track_json.mapUid}`, 1).then(response => convertMS(response[0].score))}\n` +

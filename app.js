@@ -233,16 +233,21 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         
         else if (args[0] === 'track') {
             let command;
-            if (args[1] === 'totd') command = `Track of the Day - ${args[4]}`;
-            else { command = 'Map Search'; }
+            let track_info;
+            if (args[1] === 'totd') { 
+                command = `Track of the Day - ${args[4]}`;
+                track_info = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
+            }
+            else { 
+                command = 'Map Search';
+                track_info = await trackmaniaFacade.getTrackInfo(command, args[2], args[3]).catch(err => embeddedErrorMessage(endpoint, err))
+            }
 
             console.log(args);
 
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
-                body: await trackmania.embedTrackInfo(trackmaniaFacade.liveService,
-                    await trackmaniaFacade.getTrackInfo(command, args[2], args[3]))
-                        .catch(err => embeddedErrorMessage(endpoint, err)),
+                body: await trackmania.embedTrackInfo(trackmaniaFacade.liveService, track_info),
             })
             .catch(err => embeddedErrorMessage(endpoint, err));
         }
