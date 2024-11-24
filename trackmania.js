@@ -89,15 +89,15 @@ export class FileBasedCachingDataProvider {
         if (this.data == null) {
             this.data = await fs.promises.readFile(this.filepath, { encoding: 'utf8' })
             .then((data) => this.postProcessFn(this.deserializeFunction(data)))
-		    .catch(err => {
+            .catch(err => {
                 console.log(err);
                 return null;
-		    });
-	    }
+            });
+        }
         if (this.data == null || this.expiredPredicate(this.data)) {
             this.data = this.postProcessFn(await this.fetchFunction());
             await fs.promises.writeFile(this.filepath, this.serializeFunction(this.data), 'utf8');
-	    }
+        }
         return this.data;
     }
 }
@@ -142,7 +142,7 @@ export class FileBasedCachingAccessTokenProvider extends FileBasedCachingJSONDat
                         expiryTime = JSON.parse(atob(token['accessToken'].split('.')[1]))['exp'];
 		    }
                     token[TOKEN_EXPIRY_KEY] = Math.floor(expiryTime ?? 0);
-		        } catch (err) {
+                } catch (err) {
                     console.error('Unable to determine expiry key for token', err);
                 }
                 return token;
@@ -354,9 +354,9 @@ export class TrackmaniaOAuthService extends BaseService {
      */
     async fetchAccountNames(account_ids) {
         const query = account_ids
-		.map(account_id => `accountId[]=${account_id}`)
-	    .join('&');
-	    return this.fetchEndpoint(`/api/display-names?${query}`);
+        .map(account_id => `accountId[]=${account_id}`)
+        .join('&');
+        return this.fetchEndpoint(`/api/display-names?${query}`);
     }
 }
 
