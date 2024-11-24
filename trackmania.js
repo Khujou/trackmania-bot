@@ -4,7 +4,10 @@ import fetch from 'node-fetch';
 import * as NodeCache from 'node-cache';
 import * as schedule from 'node-schedule';
 import * as fs from 'node:fs';
+import { getLogger } from './log.js';
 import { convertMillisecondsToFormattedTime as convertMS } from './utils.js';
+
+const log = getLogger();
 
 /**
  *  JSON of all trackmania.exchange map tags with ID, Name, and Color associated
@@ -90,7 +93,7 @@ export class FileBasedCachingDataProvider {
             this.data = await fs.promises.readFile(this.filepath, { encoding: 'utf8' })
             .then((data) => this.postProcessFn(this.deserializeFunction(data)))
             .catch(err => {
-                console.log(err);
+                log.warn(`Failed to read cached data from ${this.filepath}, fetching instead. `, err);
                 return null;
             });
         }
@@ -143,7 +146,7 @@ export class FileBasedCachingAccessTokenProvider extends FileBasedCachingJSONDat
 		    }
                     token[TOKEN_EXPIRY_KEY] = Math.floor(expiryTime ?? 0);
                 } catch (err) {
-                    console.error('Unable to determine expiry key for token', err);
+                    log.error('Unable to determine expiry key for token', err);
                 }
                 return token;
             },
@@ -192,13 +195,13 @@ class BaseService {
      */
     async fetchEndpoint(endpoint) {
         const finalEndpoint = this.baseUrl + endpoint;
-        console.log(`Fetching endpoint "${finalEndpoint}"`);
+        log.http(`Fetching endpoint "${finalEndpoint}"`);
         return await fetch(finalEndpoint, {
             headers: await this.getRequestHeaders()
         })
         .then(async res => await res.json())
         .catch(err => {
-            console.error(`Error fetching "${finalEndpoint}": `, err);
+            log.error(`Error fetching "${finalEndpoint}": `, err);
         });
     }
 }
@@ -230,7 +233,7 @@ class BaseNadeoService extends BaseService {
         })
         .then(response => response.json())
         .catch(err => {
-            console.log(err);
+            log.error(err);
             return;
 	});
     }
@@ -447,12 +450,11 @@ export class TrackmaniaFacade {
             track_json.stylename = parseInt(map_tags.find(tag => tag.Name === response.StyleName)?.Color, 16);
         })
         .catch(async err => {
-            console.error('Couldn\'t retrieve data from trackmania.exchange:', err);
+            log.error('Couldn\'t retrieve data from trackmania.exchange:', err);
             track_json.author = await this.oauthService.fetchAccountNames([nadeo_map_info.author])
             .then(response => response[nadeo_map_info.author])
             .catch(err => {
-                console.log('Can\'t get author WTF');
-                console.error(err);
+                log.error('Can\'t get author WTF', err);
                 track_json.author = nadeo_map_info.author;
             });
         });
@@ -462,7 +464,7 @@ export class TrackmaniaFacade {
 
     async cupOfTheDay() {
         let res = await this.meetService.cupOfTheDay();
-        console.log(res);
+        log.info(res);
         return res;
     }
 }
