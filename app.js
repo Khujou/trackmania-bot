@@ -215,11 +215,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             const lbargs = args[0].split('_');
             if (lbargs[1] ==='totd') {
                 track_info.endTimestamp = convertBase62ToNumber(lbargs[2], 10);
-            } else if (lbargs[1] === 'f') {
-                args.push(0)
-            } else if (lbargs[1] === 'l') {
+            }
+            if (lbargs[lbargs.length - 1] === 'f') {
+                args.push(0);
+            } else if (lbargs[lbargs.length - 1] === 'l') {
                 args.push(1000-args[3]);
-            } else if (lbargs[1] === 'p') {
+            } else if (lbargs[lbargs.length - 1] === 'p') {
                 data.values[0].split(';').forEach((e) => {
                     args.push(e);
                 });
@@ -240,18 +241,20 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         
         else if (args[0].slice(0, 5) === 'track') {
             const targs = args[0].split('_');
-            const groupUid = targs[2].split('-').map(e => convertBase62ToNumber(e, 16)).join('-');
+            console.log(targs);
+            console.log(args);
+            const groupUid = args[1].split('-').map(e => convertBase62ToNumber(e, 16)).join('-');
             let command;
             let track_info;
             if (targs[1] === 'totd') { 
-                command = `Track of the Day - ${args[4]}`;
+                command = `Track of the Day - ${args[3]}`;
                 if (Number(convertBase62ToNumber(targs[2], 10)) > Math.floor(Date.now() / 1000)) 
                     track_info = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
-                else track_info = await trackmaniaFacade.getTrackInfo(command, groupUid, args[3]).catch(err => embeddedErrorMessage(endpoint, err));
+                else track_info = await trackmaniaFacade.getTrackInfo(command, args[2], groupUid).catch(err => embeddedErrorMessage(endpoint, err));
             }
             else { 
                 command = 'Map Search';
-                track_info = await trackmaniaFacade.getTrackInfo(command, groupUid, args[3]).catch(err => embeddedErrorMessage(endpoint, err));
+                track_info = await trackmaniaFacade.getTrackInfo(command, args[2], groupUid).catch(err => embeddedErrorMessage(endpoint, err));
             }
 
             console.log(track_info);

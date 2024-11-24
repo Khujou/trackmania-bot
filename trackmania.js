@@ -5,7 +5,7 @@ import * as NodeCache from 'node-cache';
 import * as schedule from 'node-schedule';
 import * as fs from 'node:fs';
 import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase62 } from './utils.js';
-import { group } from 'node:console';
+import { group, time } from 'node:console';
 
 /**
  *  JSON of all trackmania.exchange map tags with ID, Name, and Color associated
@@ -383,6 +383,7 @@ export class TrackmaniaExchangeService extends BaseService {
 function toBase64(groupUid, timestamp = undefined) {
     if (timestamp !== undefined)
         timestamp = `_totd_${convertNumberToBase62(timestamp, 10)}`;
+    else timestamp = '_0';
 
     if (groupUid !== 'Personal_Best')
         groupUid = groupUid.split('-').map(e => convertNumberToBase62(e, 16)).join('-');
@@ -587,6 +588,8 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
         times: [],
     };
 
+    console.log(track_info);
+
     await live_service.getMapLeaderboard(`${track_info.groupUid}/map/${track_info.mapUid}`, length, onlyWorld, offset)
     .then(response => response.forEach(record => {
         lb_info.positions.push(record.position);
@@ -636,7 +639,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'First',
-                custom_id: `lb_f;${groupUid};${track_info.mapUid};${length}`,
+                custom_id: `lb${timestamp}_f;${groupUid};${track_info.mapUid};${length}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -646,7 +649,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'Back',
-                custom_id: `lb;${groupUid};${track_info.mapUid};${length};${Number(offset)-Number(length)}`,
+                custom_id: `lb${timestamp};${groupUid};${track_info.mapUid};${length};${Number(offset)-Number(length)}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -656,7 +659,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'Next',
-                custom_id: `lb;${groupUid};${track_info.mapUid};${length};${Number(offset)+Number(length)}`,
+                custom_id: `lb${timestamp};${groupUid};${track_info.mapUid};${length};${Number(offset)+Number(length)}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -666,7 +669,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'Last',
-                custom_id: `lb_l;${groupUid};${track_info.mapUid};${length}`,
+                custom_id: `lb${timestamp}_l;${groupUid};${track_info.mapUid};${length}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -701,7 +704,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
             type: MessageComponentTypes.ACTION_ROW,
             components: [{
                 type: MessageComponentTypes.STRING_SELECT,
-                custom_id: `lb_p;${groupUid};${track_info.mapUid}`,
+                custom_id: `lb${timestamp}_p;${groupUid};${track_info.mapUid}`,
                 placeholder: 'Select page',
                 options: pages,
             },],
