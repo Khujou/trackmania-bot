@@ -58,3 +58,43 @@ export function convertMillisecondsToFormattedTime(milliseconds) {
 
     return formattedTime;
 }
+
+const BASE62_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+
+/**
+ * 
+ * @param {string} num 
+ * @param {number} [base=10] Starting base of number. Max is Base-32. Any value higher will come out as Base-32
+ * @returns {string}
+ */
+export function convertNumberToBase62(num, base = 10) {
+    base = parseInt(Math.min(Math.max(base, 2), 32), 10);
+    let decimalVal = parseInt(num, base);
+    let base62Val = '';
+
+    while (decimalVal > 0) {
+        const remainder = decimalVal % 62;
+        base62Val = BASE62_CHARS.charAt(remainder) + base62Val;
+        decimalVal = Math.floor(decimalVal / 62);
+    }
+    
+    return base62Val;
+}
+
+/**
+ * 
+ * @param {string} base62 String of your number in Base62
+ * @param {num} [base=10] Target base for your Base62 number to become
+ * @returns {string}
+ */
+export function convertBase62ToNumber(base62num, base = 10) {
+    let val = 0;
+
+    for (let i = 0; i < base62num.length; i++) {
+        const char = base62num[base62num.length - 1 - i];
+        const digit = BASE62_CHARS.indexOf(char);
+        val += digit * Math.pow(62, i);
+    }
+
+    return val.toString(base);
+}
