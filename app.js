@@ -13,7 +13,7 @@ import * as trackmania from './trackmania.js';
 import { DiscordRequest } from './utils.js';
 import { MongoClient, ServerApiVersion } from 'mongodb';
 import * as fs from 'fs';
-import { setLogLevel, getLogger } from './log.js';
+import { setLogLevel, getLogger, logProfile } from './log.js';
 const uri = process.env.MONGODB_URI;
 
 setLogLevel('info');
@@ -52,7 +52,8 @@ const cachingTOTDProvider = new trackmania.FileBasedCachingJSONDataProvider('tot
     undefined,
     (trackInfo) => trackInfo.endTimestamp < (Math.floor(Date.now() / 1000)),
     () => trackmaniaFacade.trackOfTheDay());
-log.info(await cachingTOTDProvider.getData());
+const debugData = await logProfile(log, 'GetCachedTmData', () => cachingTOTDProvider.getData());
+log.info(JSON.stringify(debugData));
 
 const startDate = new Date(2020, 6, 1);
 let totd_channel = '1183478764856942642';

@@ -4,7 +4,7 @@ import fetch from 'node-fetch';
 import * as NodeCache from 'node-cache';
 import * as schedule from 'node-schedule';
 import * as fs from 'node:fs';
-import { getLogger } from './log.js';
+import { getLogger, logProfile } from './log.js';
 import { convertMillisecondsToFormattedTime as convertMS } from './utils.js';
 
 const log = getLogger();
@@ -188,21 +188,35 @@ class BaseService {
         }
     }
 
+    getEndpointMetricName(endpointLogName) {
+        /**
+         * Using constructor name could break this if we start minifying the JS:
+         * https://stackoverflow.com/a/10314492
+         * Keeping for now since it's less ugly than constructing this class with a name
+         */
+        return `${this.constructor.name}.${endpointLogName}`
+    }
+
     /**
      * fetches json from endpoint
-     * @param {string} endpoint 
+     * @param {endpointLogName} logging name for the endpoint, e.g. 'GetUsername'
+     * @param {endpoint} relative path to endpoint from baseUrl, e.g. '/api/username'
      * @returns {Promise<JSON>}
      */
-    async fetchEndpoint(endpoint) {
+    async fetchEndpoint(endpointLogName, endpoint) {
+        if (endpoint == undefined) {
+            throw new Error('Undefined endpoint!');
+        }
         const finalEndpoint = this.baseUrl + endpoint;
         log.http(`Fetching endpoint "${finalEndpoint}"`);
-        return await fetch(finalEndpoint, {
+        const callable = async () => fetch(finalEndpoint, {
             headers: await this.getRequestHeaders()
         })
         .then(async res => await res.json())
         .catch(err => {
             log.error(`Error fetching "${finalEndpoint}": `, err);
         });
+        return logProfile(log, this.getEndpointMetricName(endpointLogName), callable);
     }
 }
 
@@ -254,10 +268,10 @@ export class CoreService extends BaseNadeoService {
     async getMapInfo(mapIdList = undefined, mapUidList = undefined) {
         let data;
         if (mapIdList !== undefined) {
-            data = await this.fetchEndpoint(`/maps/?mapIdList=${mapIdList}`);
+            data = await this.fetchEndpoint('GetMapsById', `/maps/?mapIdList=${mapIdList}`);
         }
         else if (mapUidList !== undefined) {
-            data = await this.fetchEndpoint(`/maps/?mapUidList=${mapUidList}`);
+            data = await this.fetchEndpoint('GetMapsByUid', `/maps/?mapUidList=${mapUidList}`);
         }
         else {
             throw new Error('No values given for map info');
@@ -281,7 +295,7 @@ export class LiveService extends BaseNadeoService {
      * @returns {Promise<JSON>}
      */
     async trackOfTheDay(offset, day) {
-        const tracks_of_the_month = await this.fetchEndpoint(`/api/token/campaign/month?length=1&offset=${offset}`).then(response => response.monthList[0]);
+        const tracks_of_the_month = await this.fetchEndpoint('TrackOfTheMonth', `/api/token/campaign/month?length=1&offset=${offset}`).then(response => response.monthList[0]);
         if (tracks_of_the_month.days[day - 1]?.relativeStart > 0) {
             return tracks_of_the_month.days[day - 2];
         } else {
@@ -298,7 +312,7 @@ export class LiveService extends BaseNadeoService {
      * @returns {Promise<JSON>}
      */
     async getMapLeaderboard(customId, length = 5, onlyWorld = true, offset = 0) {
-        const map_leaderboard = await this.fetchEndpoint(`/api/token/leaderboard/group/${customId}/top?length=${length}&onlyWorld=${onlyWorld}&offset=${offset}`).then(response => response.tops[0].top);
+        const map_leaderboard = await this.fetchEndpoint('GetMapLeaderboard', `/api/token/leaderboard/group/${customId}/top?length=${length}&onlyWorld=${onlyWorld}&offset=${offset}`).then(response => response.tops[0].top);
         return map_leaderboard;
     }
 }
@@ -312,7 +326,7 @@ export class MeetService extends BaseNadeoService {
     }
 
     async cupOfTheDay() {
-        const current_cotd = await this.fetchEndpoint('/api/cup-of-the-day/current');
+        const current_cotd = await this.fetchEndpoint('CupOfTheDay', '/api/cup-of-the-day/current');
         return current_cotd;
     }
 }
@@ -359,7 +373,7 @@ export class TrackmaniaOAuthService extends BaseService {
         const query = account_ids
         .map(account_id => `accountId[]=${account_id}`)
         .join('&');
-        return this.fetchEndpoint(`/api/display-names?${query}`);
+        return this.fetchEndpoint('GetAccountDisplayNames', `/api/display-names?${query}`);
     }
 }
 
@@ -378,7 +392,7 @@ export class TrackmaniaExchangeService extends BaseService {
     }
 
     async getMapInfo(mapUid) {
-        return this.fetchEndpoint(`/api/maps/get_map_info/uid/${mapUid}`);
+        return this.fetchEndpoint('GetMapInfo', `/api/maps/get_map_info/uid/${mapUid}`);
     }
 }
 

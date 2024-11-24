@@ -38,3 +38,19 @@ export function getLogger() {
     });
     return log;
 }
+
+/**
+ * Log timing for an async function. Example:
+ *
+ *   const num = await logProfile(logger, 'Fibonacci', () => Promise.resolve(fib(6)));
+ *   logger.info('Num is ${num}'); // 12
+ *
+ * Logging is done at the 'info' level by default
+ */
+export function logProfile(log, name, promiseProducer, level = 'info') {
+    const startTime = new Date();
+    return promiseProducer().finally(() => {
+        const timeMs = new Date() - startTime;
+        log[level](JSON.stringify({ name, timeMs }));
+    });
+}
