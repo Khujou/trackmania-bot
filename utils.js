@@ -84,10 +84,11 @@ export function convertNumberToBase62(num, base = 10) {
 /**
  * 
  * @param {string} base62 String of your number in Base62
+ * @param {number} [targetLen=0]
  * @param {num} [base=10] Target base for your Base62 number to become
  * @returns {string}
  */
-export function convertBase62ToNumber(base62num, base = 10) {
+export function convertBase62ToNumber(base62num, targetLen = 0, base = 10) {
     let val = 0;
 
     for (let i = 0; i < base62num.length; i++) {
@@ -96,5 +97,5 @@ export function convertBase62ToNumber(base62num, base = 10) {
         val += digit * Math.pow(62, i);
     }
 
-    return val.toString(base);
+    return val.toString(base).padStart(targetLen, '0');
 }

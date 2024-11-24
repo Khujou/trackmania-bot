@@ -19,6 +19,7 @@ const uri = process.env.MONGODB_URI;
 const app = express();
 const PORT = process.env.PORT || 3000;
 const totdfile = 'totd.json';
+const GROUP_UID_LENS = [8,4,4,4,12];
 
 const client = new MongoClient(uri, {
     serverApi: {
@@ -203,7 +204,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             console.log(args);
             let groupUid = args[1];
             if (groupUid !== 'Personal_Best') {
-                groupUid = groupUid.split('-').map(e => convertBase62ToNumber(e, 16)).join('-');
+                groupUid = groupUid.split('-').map((e, i) => convertBase62ToNumber(e, GROUP_UID_LENS[i], 16)).join('-');
             }
 
             const track_info = {
@@ -214,7 +215,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
             const lbargs = args[0].split('_');
             if (lbargs[1] ==='totd') {
-                track_info.endTimestamp = convertBase62ToNumber(lbargs[2], 10);
+                track_info.endTimestamp = convertBase62ToNumber(lbargs[2]);
             }
             if (lbargs[lbargs.length - 1] === 'f') {
                 args.push(0);
@@ -243,12 +244,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             const targs = args[0].split('_');
             console.log(targs);
             console.log(args);
-            const groupUid = args[1].split('-').map(e => convertBase62ToNumber(e, 16)).join('-');
+            const groupUid = args[1].split('-').map((e, i) => convertBase62ToNumber(e, GROUP_UID_LENS[i], 16)).join('-');
             let command;
             let track_info;
             if (targs[1] === 'totd') { 
                 command = `Track of the Day - ${args[3]}`;
-                if (Number(convertBase62ToNumber(targs[2], 10)) > Math.floor(Date.now() / 1000)) 
+                if (Number(convertBase62ToNumber(targs[2])) > Math.floor(Date.now() / 1000)) 
                     track_info = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
                 else track_info = await trackmaniaFacade.getTrackInfo(command, args[2], groupUid).catch(err => embeddedErrorMessage(endpoint, err));
             }
