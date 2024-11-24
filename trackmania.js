@@ -5,7 +5,6 @@ import * as NodeCache from 'node-cache';
 import * as schedule from 'node-schedule';
 import * as fs from 'node:fs';
 import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase62 } from './utils.js';
-import { group, time } from 'node:console';
 
 /**
  *  JSON of all trackmania.exchange map tags with ID, Name, and Color associated
