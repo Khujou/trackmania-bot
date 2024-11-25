@@ -5,7 +5,7 @@ import * as NodeCache from 'node-cache';
 import * as schedule from 'node-schedule';
 import * as fs from 'node:fs';
 import { getLogger, logProfile } from './log.js';
-import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase62 } from './utils.js';
+import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase } from './utils.js';
 
 const log = getLogger();
 
@@ -398,11 +398,11 @@ export class TrackmaniaExchangeService extends BaseService {
 
 function toBase64(groupUid, timestamp = undefined) {
     if (timestamp !== undefined)
-        timestamp = `_totd_${convertNumberToBase62(timestamp, 10)}`;
-    else timestamp = '_0';
+        timestamp = `totd_${convertNumberToBase(timestamp.toString(), 10, 64)}`;
+    else timestamp = '0';
 
     if (groupUid !== 'Personal_Best')
-        groupUid = groupUid.split('-').map(e => convertNumberToBase62(e, 16)).join('-');
+        groupUid = convertNumberToBase(groupUid, 17, 64)
 
     return {
         groupUid: groupUid,
@@ -547,7 +547,7 @@ export async function embedTrackInfo(live_service, track_json) {
                 width: 100,
             },
             footer: {
-                text: `MapUid:\n${track_json.mapUid}`,
+                text: `Map UID: ${track_json.mapUid}`,
             },
         },],
         components: [{
@@ -556,7 +556,7 @@ export async function embedTrackInfo(live_service, track_json) {
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.PRIMARY,
                 label: 'Leaderboard',
-                custom_id: `lb${timestamp};${groupUid};${track_json.mapUid};25;0`,
+                custom_id: `lb_${timestamp};${groupUid};${track_json.mapUid};25;0`,
                 emoji: {
                     id: null,
                     name: '📋',
@@ -654,7 +654,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'First',
-                custom_id: `lb${timestamp}_f;${groupUid};${track_info.mapUid};${length}`,
+                custom_id: `lb_${timestamp}_f;${groupUid};${track_info.mapUid};${length}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -664,7 +664,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'Back',
-                custom_id: `lb${timestamp};${groupUid};${track_info.mapUid};${length};${Number(offset)-Number(length)}`,
+                custom_id: `lb_${timestamp};${groupUid};${track_info.mapUid};${length};${Number(offset)-Number(length)}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -674,7 +674,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'Next',
-                custom_id: `lb${timestamp};${groupUid};${track_info.mapUid};${length};${Number(offset)+Number(length)}`,
+                custom_id: `lb_${timestamp};${groupUid};${track_info.mapUid};${length};${Number(offset)+Number(length)}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -684,7 +684,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'Last',
-                custom_id: `lb${timestamp}_l;${groupUid};${track_info.mapUid};${length}`,
+                custom_id: `lb_${timestamp}_l;${groupUid};${track_info.mapUid};${length}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -719,7 +719,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
             type: MessageComponentTypes.ACTION_ROW,
             components: [{
                 type: MessageComponentTypes.STRING_SELECT,
-                custom_id: `lb${timestamp}_p;${groupUid};${track_info.mapUid}`,
+                custom_id: `lb_${timestamp}_p;${groupUid};${track_info.mapUid}`,
                 placeholder: 'Select page',
                 options: pages,
             },],
@@ -729,7 +729,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.PRIMARY,
                 label: 'Track Info',
-                custom_id: `track${timestamp};${groupUid};${track_info.mapUid};${track_info.author.split('-')[1].slice(1)}`,
+                custom_id: `track_${timestamp};${groupUid};${track_info.mapUid};${track_info.author.split('-')[1].slice(1)}`,
                 emoji: {
                     id: null,
                     name: '🏁'

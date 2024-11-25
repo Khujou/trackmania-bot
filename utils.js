@@ -59,43 +59,45 @@ export function convertMillisecondsToFormattedTime(milliseconds) {
     return formattedTime;
 }
 
-const BASE62_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+const BASE64_CHARS = '0123456789abcdef-ghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_';
 
 /**
- * 
- * @param {string} num 
- * @param {number} [base=10] Starting base of number. Max is Base-32. Any value higher will come out as Base-32
- * @returns {string}
+ * Function that converts a number from up to Base-64 to a decimal
+ * @param {string} str
+ * @param {string} base Base in which you're converting from
+ * @returns {BigInt}
  */
-export function convertNumberToBase62(num, base = 10) {
-    base = parseInt(Math.min(Math.max(base, 2), 32), 10);
-    let decimalVal = parseInt(num, base);
-    let base62Val = '';
+function convertToDecimal(str, base) {
+    let res = 0n;
 
-    while (decimalVal > 0) {
-        const remainder = decimalVal % 62;
-        base62Val = BASE62_CHARS.charAt(remainder) + base62Val;
-        decimalVal = Math.floor(decimalVal / 62);
+    for (let i = 0; i < str.length; i++) {
+        const char = str[str.length - 1 - i];
+        const digitVal = BASE64_CHARS.indexOf(char);
+
+        res += BigInt(digitVal) * (BigInt(base) ** BigInt(i));
     }
-    
-    return base62Val;
+
+    console.log(res);
+
+    return res;
 }
 
 /**
  * 
- * @param {string} base62 String of your number in Base62
- * @param {number} [targetLen=0]
- * @param {num} [base=10] Target base for your Base62 number to become
+ * @param {string} str str of number of up to base64
+ * @param {number} fromBase
+ * @param {number} toBase
+ * @param {number} [targetLen=0] length of string that will be spit out. Start is padded with 0s.
  * @returns {string}
  */
-export function convertBase62ToNumber(base62num, targetLen = 0, base = 10) {
-    let val = 0;
-
-    for (let i = 0; i < base62num.length; i++) {
-        const char = base62num[base62num.length - 1 - i];
-        const digit = BASE62_CHARS.indexOf(char);
-        val += digit * Math.pow(62, i);
+export function convertNumberToBase(str, fromBase, toBase, targetLen = 0) {
+    const bigBase = BigInt(toBase);
+    let bigInt = convertToDecimal(str, fromBase);
+    let res = '';
+    while (bigInt > 0n) {
+        res = BASE64_CHARS[Number(bigInt % bigBase)] + res;
+        bigInt /= bigBase;
     }
 
-    return val.toString(base).padStart(targetLen, '0');
+    return res.padStart(targetLen, '0');
 }
