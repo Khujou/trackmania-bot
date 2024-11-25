@@ -13,7 +13,11 @@ import * as trackmania from './trackmania.js';
 import { DiscordRequest, convertBase62ToNumber } from './utils.js';
 import { MongoClient, ServerApiVersion } from 'mongodb';
 import * as fs from 'fs';
+import { setLogLevel, getLogger, logProfile } from './log.js';
 const uri = process.env.MONGODB_URI;
+
+setLogLevel('info');
+const log = getLogger();
 
 // Create an express app
 const app = express();
@@ -33,12 +37,12 @@ async function run() {
     try {
         await client.connect();
         await client.db('admin').command({ ping: 1});
-        console.log('Pinged your deployment. You successfully connected to MongoDB!');
+        log.info('Pinged your deployment. You successfully connected to MongoDB!');
     } finally {
         await client.close();
     }
 }
-run().catch(console.dir);
+run().catch(log.error);
 
 const tokenProviderFactory = (identifier, fetchFunction) =>
         new trackmania.FileBasedCachingAccessTokenProvider(`accessToken-${identifier}.json`, fetchFunction);
@@ -49,7 +53,8 @@ const cachingTOTDProvider = new trackmania.FileBasedCachingJSONDataProvider('tot
     undefined,
     (trackInfo) => trackInfo.endTimestamp < (Math.floor(Date.now() / 1000)),
     () => trackmaniaFacade.trackOfTheDay());
-console.log(await cachingTOTDProvider.getData());
+const debugData = await logProfile(log, 'GetCachedTmData', () => cachingTOTDProvider.getData());
+log.info(JSON.stringify(debugData));
 
 const startDate = new Date(2020, 6, 1);
 let totd_channel = '1183478764856942642';
@@ -166,12 +171,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
                 track_json = await trackmaniaFacade.trackOfTheDay(inputDate).catch(err => embeddedErrorMessage(endpoint, err));
             } else {
-                console.log('about to open file');
+                log.debug('about to open file');
                 track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
-                console.log('finished file ops');
+                log.debug('finished file ops');
             }
 
-            console.log(track_json);
+            log.debug(track_json);
             
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
@@ -192,12 +197,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         });
 
         if (args[0] === 'test') {
-            console.log(message);
+            log.info(message);
         }
 
         else if (args[0] === 'cotd') {
             const res = await trackmaniaFacade.cupOfTheDay();
-            console.log(res);
+            log.info(res);
         }
 
         else if (args[0].slice(0,2) === 'lb') {
@@ -227,7 +232,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 });
             }
 
-            console.log(track_info);
+            log.info(args);
 
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
@@ -235,7 +240,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                     trackmaniaFacade.oauthService, track_info, args[3], true, args[4]),
             })
             .catch(err => {
-                console.error(JSON.stringify(err));
+                log.error(JSON.stringify(err));
                 embeddedErrorMessage(endpoint, err)
             });
         }
@@ -258,7 +263,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 track_info = await trackmaniaFacade.getTrackInfo(command, args[2], groupUid).catch(err => embeddedErrorMessage(endpoint, err));
             }
 
-            console.log(track_info);
+            log.info(track_info);
 
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
@@ -278,7 +283,7 @@ const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
 });
 
 async function embeddedErrorMessage(endpoint, err) {
-    console.log(err.stack);
+    log.info(err.stack);
     try {
         await DiscordRequest(endpoint, {
             method: 'PATCH',
@@ -304,11 +309,11 @@ async function embeddedErrorMessage(endpoint, err) {
             }
         });
     } catch (error) {
-        console.error(`Error sending error message: ${error}`);
+        log.error(`Error sending error message: ${error}`);
     }
 }
 
 
 app.listen(PORT, () => {
-    console.log('Listening on port', PORT);
+    log.info('Listening on port', PORT);
 });

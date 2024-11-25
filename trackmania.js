@@ -4,7 +4,10 @@ import fetch from 'node-fetch';
 import * as NodeCache from 'node-cache';
 import * as schedule from 'node-schedule';
 import * as fs from 'node:fs';
+import { getLogger, logProfile } from './log.js';
 import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase62 } from './utils.js';
+
+const log = getLogger();
 
 /**
  *  JSON of all trackmania.exchange map tags with ID, Name, and Color associated
@@ -90,7 +93,7 @@ export class FileBasedCachingDataProvider {
             this.data = await fs.promises.readFile(this.filepath, { encoding: 'utf8' })
             .then((data) => this.postProcessFn(this.deserializeFunction(data)))
             .catch(err => {
-                console.log(err);
+                log.warn(`Failed to read cached data from ${this.filepath}, fetching instead. `, err);
                 return null;
             });
         }
@@ -143,7 +146,7 @@ export class FileBasedCachingAccessTokenProvider extends FileBasedCachingJSONDat
 		    }
                     token[TOKEN_EXPIRY_KEY] = Math.floor(expiryTime ?? 0);
                 } catch (err) {
-                    console.error('Unable to determine expiry key for token', err);
+                    log.error('Unable to determine expiry key for token', err);
                 }
                 return token;
             },
@@ -185,21 +188,35 @@ class BaseService {
         }
     }
 
+    getEndpointMetricName(endpointLogName) {
+        /**
+         * Using constructor name could break this if we start minifying the JS:
+         * https://stackoverflow.com/a/10314492
+         * Keeping for now since it's less ugly than constructing this class with a name
+         */
+        return `${this.constructor.name}.${endpointLogName}`
+    }
+
     /**
      * fetches json from endpoint
-     * @param {string} endpoint 
+     * @param {endpointLogName} logging name for the endpoint, e.g. 'GetUsername'
+     * @param {endpoint} relative path to endpoint from baseUrl, e.g. '/api/username'
      * @returns {Promise<JSON>}
      */
-    async fetchEndpoint(endpoint) {
+    async fetchEndpoint(endpointLogName, endpoint) {
+        if (endpoint == undefined) {
+            throw new Error('Undefined endpoint!');
+        }
         const finalEndpoint = this.baseUrl + endpoint;
-        console.log(`Fetching endpoint "${finalEndpoint}"`);
-        return await fetch(finalEndpoint, {
+        log.http(`Fetching endpoint "${finalEndpoint}"`);
+        const callable = async () => fetch(finalEndpoint, {
             headers: await this.getRequestHeaders()
         })
         .then(async res => await res.json())
         .catch(err => {
-            console.error(`Error fetching "${finalEndpoint}": `, err);
+            log.error(`Error fetching "${finalEndpoint}": `, err);
         });
+        return logProfile(log, this.getEndpointMetricName(endpointLogName), callable);
     }
 }
 
@@ -230,7 +247,7 @@ class BaseNadeoService extends BaseService {
         })
         .then(response => response.json())
         .catch(err => {
-            console.log(err);
+            log.error(err);
             return;
 	});
     }
@@ -251,10 +268,10 @@ export class CoreService extends BaseNadeoService {
     async getMapInfo(mapIdList = undefined, mapUidList = undefined) {
         let data;
         if (mapIdList !== undefined) {
-            data = await this.fetchEndpoint(`/maps/?mapIdList=${mapIdList}`);
+            data = await this.fetchEndpoint('GetMapsById', `/maps/?mapIdList=${mapIdList}`);
         }
         else if (mapUidList !== undefined) {
-            data = await this.fetchEndpoint(`/maps/?mapUidList=${mapUidList}`);
+            data = await this.fetchEndpoint('GetMapsByUid', `/maps/?mapUidList=${mapUidList}`);
         }
         else {
             throw new Error('No values given for map info');
@@ -278,7 +295,7 @@ export class LiveService extends BaseNadeoService {
      * @returns {Promise<JSON>}
      */
     async trackOfTheDay(offset, day) {
-        const tracks_of_the_month = await this.fetchEndpoint(`/api/token/campaign/month?length=1&offset=${offset}`).then(response => response.monthList[0]);
+        const tracks_of_the_month = await this.fetchEndpoint('TrackOfTheMonth', `/api/token/campaign/month?length=1&offset=${offset}`).then(response => response.monthList[0]);
         if (tracks_of_the_month.days[day - 1]?.relativeStart > 0) {
             return tracks_of_the_month.days[day - 2];
         } else {
@@ -295,7 +312,7 @@ export class LiveService extends BaseNadeoService {
      * @returns {Promise<JSON>}
      */
     async getMapLeaderboard(customId, length = 5, onlyWorld = true, offset = 0) {
-        const map_leaderboard = await this.fetchEndpoint(`/api/token/leaderboard/group/${customId}/top?length=${length}&onlyWorld=${onlyWorld}&offset=${offset}`).then(response => response.tops[0].top);
+        const map_leaderboard = await this.fetchEndpoint('GetMapLeaderboard', `/api/token/leaderboard/group/${customId}/top?length=${length}&onlyWorld=${onlyWorld}&offset=${offset}`).then(response => response.tops[0].top);
         return map_leaderboard;
     }
 }
@@ -309,7 +326,7 @@ export class MeetService extends BaseNadeoService {
     }
 
     async cupOfTheDay() {
-        const current_cotd = await this.fetchEndpoint('/api/cup-of-the-day/current');
+        const current_cotd = await this.fetchEndpoint('CupOfTheDay', '/api/cup-of-the-day/current');
         return current_cotd;
     }
 }
@@ -356,7 +373,7 @@ export class TrackmaniaOAuthService extends BaseService {
         const query = account_ids
         .map(account_id => `accountId[]=${account_id}`)
         .join('&');
-        return this.fetchEndpoint(`/api/display-names?${query}`);
+        return this.fetchEndpoint('GetAccountDisplayNames', `/api/display-names?${query}`);
     }
 }
 
@@ -375,7 +392,7 @@ export class TrackmaniaExchangeService extends BaseService {
     }
 
     async getMapInfo(mapUid) {
-        return this.fetchEndpoint(`/api/maps/get_map_info/uid/${mapUid}`);
+        return this.fetchEndpoint('GetMapInfo', `/api/maps/get_map_info/uid/${mapUid}`);
     }
 }
 
@@ -461,12 +478,11 @@ export class TrackmaniaFacade {
             track_json.stylename = parseInt(map_tags.find(tag => tag.Name === response.StyleName)?.Color, 16);
         })
         .catch(async err => {
-            console.error('Couldn\'t retrieve data from trackmania.exchange:', err);
+            log.error('Couldn\'t retrieve data from trackmania.exchange:', err);
             track_json.author = await this.oauthService.fetchAccountNames([nadeo_map_info.author])
             .then(response => response[nadeo_map_info.author])
             .catch(err => {
-                console.log('Can\'t get author WTF');
-                console.error(err);
+                log.error('Can\'t get author WTF', err);
                 track_json.author = nadeo_map_info.author;
             });
         });
@@ -476,7 +492,7 @@ export class TrackmaniaFacade {
 
     async cupOfTheDay() {
         let res = await this.meetService.cupOfTheDay();
-        console.log(res);
+        log.info(res);
         return res;
     }
 }
