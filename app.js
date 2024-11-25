@@ -10,7 +10,7 @@ import {
 } from 'discord-interactions';
 import * as schedule from 'node-schedule';
 import * as trackmania from './trackmania.js';
-import { DiscordRequest, convertBase62ToNumber } from './utils.js';
+import { DiscordRequest, convertNumberToBase } from './utils.js';
 import { MongoClient, ServerApiVersion } from 'mongodb';
 import * as fs from 'fs';
 import { setLogLevel, getLogger, logProfile } from './log.js';
@@ -22,8 +22,7 @@ const log = getLogger();
 // Create an express app
 const app = express();
 const PORT = process.env.PORT || 3000;
-const totdfile = 'totd.json';
-const GROUP_UID_LENS = [8,4,4,4,12];
+const UID_LENGTH = 36;
 
 const client = new MongoClient(uri, {
     serverApi: {
@@ -206,10 +205,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         }
 
         else if (args[0].slice(0,2) === 'lb') {
-            console.log(args);
+            log.info(args);
             let groupUid = args[1];
             if (groupUid !== 'Personal_Best') {
-                groupUid = groupUid.split('-').map((e, i) => convertBase62ToNumber(e, GROUP_UID_LENS[i], 16)).join('-');
+                groupUid = convertNumberToBase(groupUid, 64, 17, UID_LENGTH);
             }
 
             const track_info = {
@@ -220,7 +219,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
             const lbargs = args[0].split('_');
             if (lbargs[1] ==='totd') {
-                track_info.endTimestamp = convertBase62ToNumber(lbargs[2]);
+                track_info.endTimestamp = Number(convertNumberToBase(lbargs[2], 64, 10));
             }
             if (lbargs[lbargs.length - 1] === 'f') {
                 args.push(0);
@@ -249,12 +248,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             const targs = args[0].split('_');
             console.log(targs);
             console.log(args);
-            const groupUid = args[1].split('-').map((e, i) => convertBase62ToNumber(e, GROUP_UID_LENS[i], 16)).join('-');
+            const groupUid = convertNumberToBase(args[1], 64, 17, UID_LENGTH);
             let command;
             let track_info;
             if (targs[1] === 'totd') { 
                 command = `Track of the Day - ${args[3]}`;
-                if (Number(convertBase62ToNumber(targs[2])) > Math.floor(Date.now() / 1000)) 
+                if (Number(convertNumberToBase(targs[2], 64, 10)) > Math.floor(Date.now() / 1000)) 
                     track_info = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
                 else track_info = await trackmaniaFacade.getTrackInfo(command, args[2], groupUid).catch(err => embeddedErrorMessage(endpoint, err));
             }
