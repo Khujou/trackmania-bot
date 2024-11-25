@@ -10,7 +10,7 @@ import {
 } from 'discord-interactions';
 import * as schedule from 'node-schedule';
 import * as trackmania from './trackmania.js';
-import { DiscordRequest } from './utils.js';
+import { DiscordRequest, convertBase62ToNumber } from './utils.js';
 import { MongoClient, ServerApiVersion } from 'mongodb';
 import * as fs from 'fs';
 import { setLogLevel, getLogger, logProfile } from './log.js';
@@ -23,6 +23,7 @@ const log = getLogger();
 const app = express();
 const PORT = process.env.PORT || 3000;
 const totdfile = 'totd.json';
+const GROUP_UID_LENS = [8,4,4,4,12];
 
 const client = new MongoClient(uri, {
     serverApi: {
@@ -205,25 +206,33 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         }
 
         else if (args[0].slice(0,2) === 'lb') {
+            console.log(args);
+            let groupUid = args[1];
+            if (groupUid !== 'Personal_Best') {
+                groupUid = groupUid.split('-').map((e, i) => convertBase62ToNumber(e, GROUP_UID_LENS[i], 16)).join('-');
+            }
+
+            const track_info = {
+                author: message.embeds[0].author.name,
+                groupUid: groupUid,
+                mapUid: args[2],
+            };
 
             const lbargs = args[0].split('_');
-            if (lbargs[1] === 'f') {
-                args.push(0)
-            } else if (lbargs[1] === 'l') {
+            if (lbargs[1] ==='totd') {
+                track_info.endTimestamp = convertBase62ToNumber(lbargs[2]);
+            }
+            if (lbargs[lbargs.length - 1] === 'f') {
+                args.push(0);
+            } else if (lbargs[lbargs.length - 1] === 'l') {
                 args.push(1000-args[3]);
-            } else if (lbargs[1] === 'p') {
+            } else if (lbargs[lbargs.length - 1] === 'p') {
                 data.values[0].split(';').forEach((e) => {
                     args.push(e);
                 });
             }
 
             log.info(args);
-
-            const track_info = {
-                author: message.embeds[0].author.name,
-                groupUid: args[1],
-                mapUid: args[2],
-            };
 
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
@@ -236,19 +245,25 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             });
         }
         
-        else if (args[0] === 'track') {
+        else if (args[0].slice(0, 5) === 'track') {
+            const targs = args[0].split('_');
+            console.log(targs);
+            console.log(args);
+            const groupUid = args[1].split('-').map((e, i) => convertBase62ToNumber(e, GROUP_UID_LENS[i], 16)).join('-');
             let command;
             let track_info;
-            if (args[1] === 'totd') { 
-                command = `Track of the Day - ${args[4]}`;
-                track_info = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
+            if (targs[1] === 'totd') { 
+                command = `Track of the Day - ${args[3]}`;
+                if (Number(convertBase62ToNumber(targs[2])) > Math.floor(Date.now() / 1000)) 
+                    track_info = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
+                else track_info = await trackmaniaFacade.getTrackInfo(command, args[2], groupUid).catch(err => embeddedErrorMessage(endpoint, err));
             }
             else { 
                 command = 'Map Search';
-                track_info = await trackmaniaFacade.getTrackInfo(command, args[2], args[3]).catch(err => embeddedErrorMessage(endpoint, err))
+                track_info = await trackmaniaFacade.getTrackInfo(command, args[2], groupUid).catch(err => embeddedErrorMessage(endpoint, err));
             }
 
-            log.info(args);
+            log.info(track_info);
 
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
