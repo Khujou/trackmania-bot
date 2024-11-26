@@ -9,7 +9,7 @@
         "start": "node app.js",
         "register": "node commands.js",
         "dev": "nodemon app.js",
-        "test": "node tests.js"
+        "test": "jest"
     },
     "dependencies": {
         "discord-interactions": "^3.4.0",
@@ -22,6 +22,7 @@
         "winston": "^3.17.0"
     },
     "devDependencies": {
+        "jest": "^29.7.0",
         "nodemon": "^3.0.1"
     }
 }
