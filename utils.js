@@ -77,8 +77,6 @@ function convertToDecimal(str, base) {
         res += BigInt(digitVal) * (BigInt(base) ** BigInt(i));
     }
 
-    console.log(res);
-
     return res;
 }
 
