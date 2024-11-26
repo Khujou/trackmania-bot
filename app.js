@@ -216,7 +216,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 mapUid: args[2],
             };
 
-            const lbargs = args[0].split('_');
+            const lbargs = args[0].split('+');
             if (lbargs[1] ==='totd') {
                 track_info.endTimestamp = Number(convertNumberToBase(lbargs[2], 64, 10));
             }
@@ -244,7 +244,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         }
         
         else if (args[0].slice(0, 5) === 'track') {
-            const targs = args[0].split('_');
+            const targs = args[0].split('+');
             console.log(targs);
             console.log(args);
             const groupUid = revertUID(args[1]);

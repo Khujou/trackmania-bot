@@ -398,7 +398,7 @@ export class TrackmaniaExchangeService extends BaseService {
 
 function toBase64(groupUid, timestamp = undefined) {
     if (timestamp !== undefined)
-        timestamp = `totd_${convertNumberToBase(timestamp.toString(), 10, 64)}`;
+        timestamp = `totd+${convertNumberToBase(timestamp.toString(), 10, 64)}`;
     else timestamp = '0';
 
     if (groupUid !== 'Personal_Best') {
@@ -511,7 +511,7 @@ export async function embedTrackInfo(live_service, track_json) {
     console.log(track_json);
 
     const medal_times = 
-        `:first_place: ${await live_service.getMapLeaderboard(`${track_json.groupUid}/map/${track_json.mapUid}`, 1).then(response => convertMS(response[0].score))}\n` +
+        `:first_place: ${await live_service.getMapLeaderboard(`Personal_Best/map/${track_json.mapUid}`, 1).then(response => convertMS(response[0].score))}\n` +
         `:green_circle: ${track_json.authortime}\n` +
         `:yellow_circle: ${track_json.goldtime}`;
 
@@ -559,7 +559,7 @@ export async function embedTrackInfo(live_service, track_json) {
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.PRIMARY,
                 label: 'Leaderboard',
-                custom_id: `lb_${timestamp};${groupUid};${track_json.mapUid};25;0`,
+                custom_id: `lb+${timestamp};${groupUid};${track_json.mapUid};25;0`,
                 emoji: {
                     id: null,
                     name: '📋',
@@ -657,7 +657,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'First',
-                custom_id: `lb_${timestamp}_f;${groupUid};${track_info.mapUid};${length}`,
+                custom_id: `lb+${timestamp}+f;${groupUid};${track_info.mapUid};${length}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -667,7 +667,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'Back',
-                custom_id: `lb_${timestamp};${groupUid};${track_info.mapUid};${length};${Number(offset)-Number(length)}`,
+                custom_id: `lb+${timestamp};${groupUid};${track_info.mapUid};${length};${Number(offset)-Number(length)}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -677,7 +677,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'Next',
-                custom_id: `lb_${timestamp};${groupUid};${track_info.mapUid};${length};${Number(offset)+Number(length)}`,
+                custom_id: `lb+${timestamp};${groupUid};${track_info.mapUid};${length};${Number(offset)+Number(length)}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -687,7 +687,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.SECONDARY,
                 label: 'Last',
-                custom_id: `lb_${timestamp}_l;${groupUid};${track_info.mapUid};${length}`,
+                custom_id: `lb+${timestamp}+l;${groupUid};${track_info.mapUid};${length}`,
                 disabled: false,
                 emoji: {
                     id: null,
@@ -722,7 +722,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
             type: MessageComponentTypes.ACTION_ROW,
             components: [{
                 type: MessageComponentTypes.STRING_SELECT,
-                custom_id: `lb_${timestamp}_p;${groupUid};${track_info.mapUid}`,
+                custom_id: `lb+${timestamp}+p;${groupUid};${track_info.mapUid}`,
                 placeholder: 'Select page',
                 options: pages,
             },],
@@ -732,7 +732,7 @@ export async function leaderboard(live_service, oauth_service, track_info, lengt
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.PRIMARY,
                 label: 'Track Info',
-                custom_id: `track_${timestamp};${groupUid};${track_info.mapUid};${track_info.author.split('-')[1].slice(1)}`,
+                custom_id: `track+${timestamp};${groupUid};${track_info.mapUid};${track_info.author.split('-')[1].slice(1)}`,
                 emoji: {
                     id: null,
                     name: '🏁'
