@@ -10,11 +10,12 @@ import {
 } from 'discord-interactions';
 import * as schedule from 'node-schedule';
 import * as trackmania from './trackmania.js';
-import { DiscordRequest, convertNumberToBase } from './utils.js';
+import { DiscordRequest } from './utils.js';
 import { MongoClient, ServerApiVersion } from 'mongodb';
 import * as fs from 'fs';
 import { setLogLevel, getLogger, logProfile } from './log.js';
 const uri = process.env.MONGODB_URI;
+import { convertNumberToBase } from './baseConversion.js';
 
 setLogLevel('info');
 const log = getLogger();

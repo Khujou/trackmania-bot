@@ -5,7 +5,8 @@ import * as NodeCache from 'node-cache';
 import * as schedule from 'node-schedule';
 import * as fs from 'node:fs';
 import { getLogger, logProfile } from './log.js';
-import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase } from './utils.js';
+import { convertMillisecondsToFormattedTime as convertMS } from './utils.js';
+import { convertNumberToBase } from './baseConversion.js';
 
 const log = getLogger();
 
