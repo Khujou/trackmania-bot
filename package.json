@@ -9,7 +9,7 @@
         "start": "node app.js",
         "register": "node commands.js",
         "dev": "nodemon app.js",
-        "test": "jest"
+        "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
     },
     "dependencies": {
         "discord-interactions": "^3.4.0",
@@ -24,5 +24,8 @@
     "devDependencies": {
         "jest": "^29.7.0",
         "nodemon": "^3.0.1"
+    },
+    "jest": {
+        "transform": {}
     }
 }
