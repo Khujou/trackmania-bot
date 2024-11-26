@@ -59,7 +59,7 @@ export function convertMillisecondsToFormattedTime(milliseconds) {
     return formattedTime;
 }
 
-const BASE64_CHARS = '0123456789abcdef-ghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_';
+const BASE64_CHARS = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_';
 
 /**
  * Function that converts a number from up to Base-64 to a decimal
@@ -99,5 +99,6 @@ export function convertNumberToBase(str, fromBase, toBase, targetLen = 0) {
         bigInt /= bigBase;
     }
 
-    return res.padStart(targetLen, '0');
+    res = res.padStart(targetLen, '0');
+    return res;
 }

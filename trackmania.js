@@ -401,13 +401,16 @@ function toBase64(groupUid, timestamp = undefined) {
         timestamp = `totd_${convertNumberToBase(timestamp.toString(), 10, 64)}`;
     else timestamp = '0';
 
-    if (groupUid !== 'Personal_Best')
-        groupUid = convertNumberToBase(groupUid, 17, 64)
+    if (groupUid !== 'Personal_Best') {
+        groupUid = convertNumberToBase(groupUid.split('-').join(''), 16, 64);
+    }
 
-    return {
+    const res = {
         groupUid: groupUid,
         timestamp: timestamp
     }
+
+    return res;
 }
 
 export class TrackmaniaFacade {

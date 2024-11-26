@@ -22,7 +22,6 @@ const log = getLogger();
 // Create an express app
 const app = express();
 const PORT = process.env.PORT || 3000;
-const UID_LENGTH = 36;
 
 const client = new MongoClient(uri, {
     serverApi: {
@@ -208,7 +207,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             log.info(args);
             let groupUid = args[1];
             if (groupUid !== 'Personal_Best') {
-                groupUid = convertNumberToBase(groupUid, 64, 17, UID_LENGTH);
+                groupUid = revertUID(groupUid);
             }
 
             const track_info = {
@@ -248,7 +247,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             const targs = args[0].split('_');
             console.log(targs);
             console.log(args);
-            const groupUid = convertNumberToBase(args[1], 64, 17, UID_LENGTH);
+            const groupUid = revertUID(args[1]);
             let command;
             let track_info;
             if (targs[1] === 'totd') { 
@@ -273,6 +272,17 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
     }
 });
+
+const UID_LENGTH = 32;
+const UID_DASH_INDICES = [0, 8, 12, 16, 20, 32];
+
+function revertUID(UID) {
+    UID = convertNumberToBase(UID, 64, 16, UID_LENGTH);
+    let arr = [];
+    for (let i = 1; i < UID_DASH_INDICES.length; i++)
+        arr.push(UID.slice(UID_DASH_INDICES[i-1], UID_DASH_INDICES[i]));
+    return arr.join('-');
+}
 
 const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
     await DiscordRequest(`channels/${totd_channel}/messages`, {
