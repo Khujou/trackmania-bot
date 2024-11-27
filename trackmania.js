@@ -199,8 +199,8 @@ class BaseService {
 
     /**
      * fetches json from endpoint
-     * @param {endpointLogName} logging name for the endpoint, e.g. 'GetUsername'
-     * @param {endpoint} relative path to endpoint from baseUrl, e.g. '/api/username'
+     * @param {string} endpointLogName logging name for the endpoint, e.g. 'GetUsername'
+     * @param {endpoint} endpoint relative path to endpoint from baseUrl, e.g. '/api/username'
      * @returns {Promise<JSON>}
      */
     async fetchEndpoint(endpointLogName, endpoint) {
@@ -451,7 +451,13 @@ export class TrackmaniaFacade {
      * @returns {Promise<JSON>}
      */
     async getTrackInfo(command, mapUid, groupUid = 'Personal_Best') {
-        const nadeo_map_info = await this.coreService.getMapInfo(undefined, mapUid).then(response => response[0]);
+        const promises = await Promise.all([
+            await this.coreService.getMapInfo(undefined, mapUid).then(response => response[0]),
+            await this.exchangeService.getMapInfo(mapUid)
+        ]);
+
+        const nadeo_map_info = promises[0];
+        const tmx_map_info = promises[1];
 
         let track_json = {
             command: command,
@@ -472,15 +478,14 @@ export class TrackmaniaFacade {
          * with attributes from trackmania.exchange. If it cannot, only updates the Username attribute
          * of map by using an API from Nadeo.
          */
-        await this.exchangeService.getMapInfo(mapUid)
-        .then(response => {
-            track_json.title = response.Name
-            track_json.author = response.Username;
-            track_json.tags = response.Tags;
-            track_json.website = `https://trackmania.exchange/s/tr/${response.TrackID}`;
-            track_json.stylename = parseInt(map_tags.find(tag => tag.Name === response.StyleName)?.Color, 16);
-        })
-        .catch(async err => {
+
+        if (tmx_map_info !== null) {
+            track_json.title = tmx_map_info.Name
+            track_json.author = tmx_map_info.Username;
+            track_json.tags = tmx_map_info.Tags;
+            track_json.website = `https://trackmania.exchange/s/tr/${tmx_map_info.TrackID}`;
+            track_json.stylename = parseInt(map_tags.find(tag => tag.Name === tmx_map_info.StyleName)?.Color, 16);
+        } else {
             log.error('Couldn\'t retrieve data from trackmania.exchange:', err);
             track_json.author = await this.oauthService.fetchAccountNames([nadeo_map_info.author])
             .then(response => response[nadeo_map_info.author])
@@ -488,7 +493,7 @@ export class TrackmaniaFacade {
                 log.error('Can\'t get author WTF', err);
                 track_json.author = nadeo_map_info.author;
             });
-        });
+        };
 
         return track_json;
     }
@@ -497,6 +502,84 @@ export class TrackmaniaFacade {
         let res = await this.meetService.cupOfTheDay();
         log.info(res);
         return res;
+    }
+
+    /**
+     * 
+     * @param {LiveService} live_service 
+     * @param {JSON} track_info 
+     * @param {Number} [length=10]
+     * @param {Boolean} [onlyWorld=true]
+     * @param {Number} [offset=0]
+     * @returns {Promise<JSON>}
+     */
+    async getLeaderboardInfo(track_info, length = 25, onlyWorld = true, offset = 0) {
+        let lb_info = {
+            positions: [],
+            accountIds: [],
+            times: [],
+        };
+
+        console.log(track_info);
+
+        await this.liveService.getMapLeaderboard(`${track_info.groupUid}/map/${track_info.mapUid}`, length, onlyWorld, offset)
+        .then(response => response.forEach(record => {
+            lb_info.positions.push(record.position);
+            lb_info.accountIds.push(record.accountId);
+            lb_info.times.push(`${convertMS(record.score)}`);
+        }));
+
+        let pages = [];
+        for (let i = 0; i < 25; i++) {
+            pages.push({
+                label: `Page ${((Number(offset)+(Number(length)*i))/Number(length))+1}`,
+                value: `${length};${Number(offset)+(Number(length)*i)}`,
+                description: `Leaderboard positions ${Number(offset)+(Number(length)*i)} - ${(Number(offset)+Number(length))+(Number(length)*i)}`,
+            });
+        }
+        
+        let records = [];
+        let s_accounts = [];
+        if (lb_info.accountIds.length > 0) {
+            const accounts = await this.oauthService.fetchAccountNames(lb_info.accountIds);
+            let field = {
+                name: `${lb_info.positions[0]} - ${lb_info.positions[lb_info.positions.length - 1]}`,
+                value: '```',
+                inline: true,
+            };
+            lb_info.accountIds.forEach((accountId, i) => {
+                field.value += `${lb_info.positions[i].toString().padStart(5)}: ${lb_info.times[i]} - ${accounts[accountId]}\n`;
+                s_accounts.push({
+                    label: `${accounts[accountId]}`,
+                    value: `${accountId}`,
+                });
+            });
+            field.value += '```';
+            records.push(field);
+        }
+        else {
+            records.push({
+                name: `no records available`,
+                value: `come back later :(`,
+                inline: true,
+            });
+        }
+
+        const { groupUid, timestamp } = toBase64(track_info.groupUid, track_info.endTimestamp);
+
+        const leaderboard_info = {
+            groupUid: groupUid,
+            timestamp: timestamp,
+            mapUid: track_info.mapUid,
+            length: Number(length),
+            offset: Number(offset),
+            records: records,
+            accounts: s_accounts,
+            author: track_info.author,
+            pages: pages,
+        };
+
+        return leaderboard_info;
     }
 }
 
@@ -585,160 +668,95 @@ export async function embedTrackInfo(live_service, track_json) {
 }
 
 
-export function embedLeaderboardInfo() {
-
-}
-
-
-/**
- * 
- * @param {LiveService} live_service 
- * @param {JSON} track_info 
- * @param {Number} [length=10]
- * @param {Boolean} [onlyWorld=true]
- * @param {Number} [offset=0]
- * @returns {Promise<JSON>}
- */
-export async function leaderboard(live_service, oauth_service, track_info, length = 25, onlyWorld = true, offset = 0) {
-    let lb_info = {
-        positions: [],
-        accountIds: [],
-        times: [],
-    };
-
-    console.log(track_info);
-
-    await live_service.getMapLeaderboard(`${track_info.groupUid}/map/${track_info.mapUid}`, length, onlyWorld, offset)
-    .then(response => response.forEach(record => {
-        lb_info.positions.push(record.position);
-        lb_info.accountIds.push(record.accountId);
-        lb_info.times.push(`${convertMS(record.score)}`);
-    }));
-
-    let pages = [];
-    for (let i = 0; i < 25; i++) {
-        pages.push({
-            label: `Page ${((Number(offset)+(Number(length)*i))/Number(length))+1}`,
-            value: `${length};${Number(offset)+(Number(length)*i)}`,
-            description: `Leaderboard positions ${Number(offset)+(Number(length)*i)} - ${(Number(offset)+Number(length))+(Number(length)*i)}`,
-        });
-    }
-    
-    let records = [];
-    let s_accounts = [];
-    if (lb_info.accountIds.length > 0) {
-        const accounts = await oauth_service.fetchAccountNames(lb_info.accountIds);
-        let field = {
-            name: `${lb_info.positions[0]} - ${lb_info.positions[lb_info.positions.length - 1]}`,
-            value: '```',
-            inline: true,
-        };
-        lb_info.accountIds.forEach((accountId, i) => {
-            field.value += `${lb_info.positions[i].toString().padStart(5)}: ${lb_info.times[i]} - ${accounts[accountId]}\n`;
-            s_accounts.push({
-                label: `${accounts[accountId]}`,
-                value: `${accountId}`,
-            });
-        });
-        field.value += '```';
-        records.push(field);
-    }
-    else {
-        records.push({
-            name: `no records available`,
-            value: `come back later :(`,
-            inline: true,
-        });
-    }
-
-    const { groupUid, timestamp } = toBase64(track_info.groupUid, track_info.endTimestamp);
+export function embedLeaderboardInfo(lb_info) {
+    const { timestamp, groupUid, mapUid, length, offset, records, accounts, author, pages } = lb_info;
 
     let buttons = [{
-                type: MessageComponentTypes.BUTTON,
-                style: ButtonStyleTypes.SECONDARY,
-                label: 'First',
-                custom_id: `lb+${timestamp}+f;${groupUid};${track_info.mapUid};${length}`,
-                disabled: false,
-                emoji: {
-                    id: null,
-                    name: '⏪'
-                },
-            },{
-                type: MessageComponentTypes.BUTTON,
-                style: ButtonStyleTypes.SECONDARY,
-                label: 'Back',
-                custom_id: `lb+${timestamp};${groupUid};${track_info.mapUid};${length};${Number(offset)-Number(length)}`,
-                disabled: false,
-                emoji: {
-                    id: null,
-                    name: '⬅️',
-                },
-            },{
-                type: MessageComponentTypes.BUTTON,
-                style: ButtonStyleTypes.SECONDARY,
-                label: 'Next',
-                custom_id: `lb+${timestamp};${groupUid};${track_info.mapUid};${length};${Number(offset)+Number(length)}`,
-                disabled: false,
-                emoji: {
-                    id: null,
-                    name: '➡️',
-                },
-            },{
-                type: MessageComponentTypes.BUTTON,
-                style: ButtonStyleTypes.SECONDARY,
-                label: 'Last',
-                custom_id: `lb+${timestamp}+l;${groupUid};${track_info.mapUid};${length}`,
-                disabled: false,
-                emoji: {
-                    id: null,
-                    name: '⏩'
-                },
-            }];
-    
-    if (Number(offset) === 0) buttons[0].disabled = true;
-    if (Number(offset)-Number(length) < 0) buttons[1].disabled = true;
-    if (Number(offset)+Number(length) >= 1000) buttons[2].disabled = true;
-    if (Number(offset) >= 1000-Number(length)) buttons[3].disabled = true;
+        type: MessageComponentTypes.BUTTON,
+        style: ButtonStyleTypes.SECONDARY,
+        label: 'First',
+        custom_id: `lb+${timestamp}+f;${groupUid};${mapUid};${length}`,
+        disabled: false,
+        emoji: {
+            id: null,
+            name: '⏪'
+        },
+    },{
+        type: MessageComponentTypes.BUTTON,
+        style: ButtonStyleTypes.SECONDARY,
+        label: 'Back',
+        custom_id: `lb+${timestamp};${groupUid};${mapUid};${length};${offset-length}`,
+        disabled: false,
+        emoji: {
+            id: null,
+            name: '⬅️',
+        },
+    },{
+        type: MessageComponentTypes.BUTTON,
+        style: ButtonStyleTypes.SECONDARY,
+        label: 'Next',
+        custom_id: `lb+${timestamp};${groupUid};${mapUid};${length};${Number(offset)+Number(length)}`,
+        disabled: false,
+        emoji: {
+            id: null,
+            name: '➡️',
+        },
+    },{
+        type: MessageComponentTypes.BUTTON,
+        style: ButtonStyleTypes.SECONDARY,
+        label: 'Last',
+        custom_id: `lb+${timestamp}+l;${groupUid};${mapUid};${length}`,
+        disabled: false,
+        emoji: {
+            id: null,
+            name: '⏩'
+        },
+    }];
+
+    if (offset === 0) buttons[0].disabled = true;
+    if (offset-length < 0) buttons[1].disabled = true;
+    if (offset+length >= 1000) buttons[2].disabled = true;
+    if (offset >= 1000-length) buttons[3].disabled = true;
 
     const res = {
-        embeds: [{
-            author: { name: track_info.author, },
-            title: `Leaderboard`,
-            color: parseInt('ffffff', 16),
-            fields: records,
-        }],
+    embeds: [{
+        author: { name: author, },
+        title: `Leaderboard`,
+        color: parseInt('ffffff', 16),
+        fields: records,
+    }],
+    components: [{
+        type: MessageComponentTypes.ACTION_ROW,
+        components: buttons,
+    },{
+        type: MessageComponentTypes.ACTION_ROW,
         components: [{
-            type: MessageComponentTypes.ACTION_ROW,
-            components: buttons,
-        },{
-            type: MessageComponentTypes.ACTION_ROW,
-            components: [{
-                type: MessageComponentTypes.STRING_SELECT,
-                custom_id: 'acc',
-                placeholder: 'Search player info',
-                options: s_accounts,
-            }],
-        },{
-            type: MessageComponentTypes.ACTION_ROW,
-            components: [{
-                type: MessageComponentTypes.STRING_SELECT,
-                custom_id: `lb+${timestamp}+p;${groupUid};${track_info.mapUid}`,
-                placeholder: 'Select page',
-                options: pages,
-            },],
-        },{
-            type: MessageComponentTypes.ACTION_ROW,
-            components: [{
-                type: MessageComponentTypes.BUTTON,
-                style: ButtonStyleTypes.PRIMARY,
-                label: 'Track Info',
-                custom_id: `track+${timestamp};${groupUid};${track_info.mapUid};${track_info.author.split('-')[1].slice(1)}`,
-                emoji: {
-                    id: null,
-                    name: '🏁'
-                },
-            },],
+            type: MessageComponentTypes.STRING_SELECT,
+            custom_id: 'acc',
+            placeholder: 'Search player info',
+            options: accounts,
+        }],
+    },{
+        type: MessageComponentTypes.ACTION_ROW,
+        components: [{
+            type: MessageComponentTypes.STRING_SELECT,
+            custom_id: `lb+${timestamp}+p;${groupUid};${mapUid}`,
+            placeholder: 'Select page',
+            options: pages,
         },],
+    },{
+        type: MessageComponentTypes.ACTION_ROW,
+        components: [{
+            type: MessageComponentTypes.BUTTON,
+            style: ButtonStyleTypes.PRIMARY,
+            label: 'Track Info',
+            custom_id: `track+${timestamp};${groupUid};${mapUid};${author.split('-')[1].slice(1)}`,
+            emoji: {
+                id: null,
+                name: '🏁'
+            },
+        },],
+    },],
     };
 
     return res;

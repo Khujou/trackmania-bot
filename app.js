@@ -46,6 +46,8 @@ const tokenProviderFactory = (identifier, fetchFunction) =>
         new trackmania.FileBasedCachingAccessTokenProvider(`accessToken-${identifier}.json`, fetchFunction);
 const trackmaniaFacade = new trackmania.TrackmaniaFacade(tokenProviderFactory);
 
+console.log(await trackmaniaFacade.trackOfTheDay());
+
 // Returns up-to-date TOTD info. Checks if stored TOTD info is out of date and replaces with up-to-date info.
 const cachingTOTDProvider = new trackmania.FileBasedCachingJSONDataProvider('totd.json',
     undefined,
@@ -230,12 +232,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 });
             }
 
+            const lb_info = await trackmaniaFacade.getLeaderboardInfo(track_info, args[3], true, args[4]);
+
             log.info(args);
+
+
 
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
-                body: await trackmania.leaderboard(trackmaniaFacade.liveService,
-                    trackmaniaFacade.oauthService, track_info, args[3], true, args[4]),
+                body: trackmania.embedLeaderboardInfo(lb_info),
             })
             .catch(err => {
                 log.error(JSON.stringify(err));
