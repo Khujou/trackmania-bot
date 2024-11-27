@@ -22,6 +22,10 @@ const log = getLogger();
 // Create an express app
 const app = express();
 const PORT = process.env.PORT || 3000;
+const accountWatchers = {
+    '205541764206034944': ['c3ed703f-8a07-49c7-a3b3-06713f548142'],
+    '500722458056327196': ['c3ed703f-8a07-49c7-a3b3-06713f548142'],
+};
 
 const client = new MongoClient(uri, {
     serverApi: {
@@ -45,8 +49,6 @@ run().catch(log.error);
 const tokenProviderFactory = (identifier, fetchFunction) =>
         new trackmania.FileBasedCachingAccessTokenProvider(`accessToken-${identifier}.json`, fetchFunction);
 const trackmaniaFacade = new trackmania.TrackmaniaFacade(tokenProviderFactory);
-
-console.log(await trackmaniaFacade.trackOfTheDay());
 
 // Returns up-to-date TOTD info. Checks if stored TOTD info is out of date and replaces with up-to-date info.
 const cachingTOTDProvider = new trackmania.FileBasedCachingJSONDataProvider('totd.json',
@@ -188,9 +190,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
     }
 
     if (type === InteractionType.MESSAGE_COMPONENT) {
-        const componentId = data.custom_id;
+        console.log(message.interaction);
         const endpoint = `channels/${message.channel_id}/messages/${message.id}`;
-        const args = componentId.split(';');
+        const args = data.custom_id.split(';');
+
 
         res.send({
             type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE,
@@ -219,28 +222,58 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             };
 
             const lbargs = args[0].split('+');
-            if (lbargs[1] ==='totd') {
-                track_info.endTimestamp = Number(convertNumberToBase(lbargs[2], 64, 10));
+            if (lbargs[1] === 'totd') track_info.endTimestamp = Number(convertNumberToBase(lbargs[2], 64, 10));
+            let body;
+            if (lbargs[lbargs.length - 1] ==='i') {
+                let leaderboard = await trackmaniaFacade.getLeaderboardInfo(track_info, args[3], true, args[4]);
+                const userId = message.interaction.user.id;
+                const userName = message.interaction.user.global_name;
+                if (accountWatchers[userId] !== undefined) {
+                    const mapType = lbargs[lbargs.length-3];
+                    const watchedRecords = await trackmaniaFacade.getWatchedAccounts(accountWatchers[userId], revertUID(lbargs[lbargs.length-2], mapType));
+                    console.log(watchedRecords);
+                    const watchingLB = await trackmaniaFacade.generateLeaderboardField({
+                        name: `${userName}'s Watched Players`,
+                        records: watchedRecords,
+                    });
+                    leaderboard.fields.push(watchingLB.field);
+                    leaderboard.watchedAccounts = watchingLB.players;
+                }
+                body = trackmania.embedLeaderboardInfo(leaderboard);
+            } else {
+                console.log(lbargs);
+                if (lbargs[lbargs.length - 1] === 'f') {
+                    args.push(0);
+                } else if (lbargs[lbargs.length - 1] === 'l') {
+                    args.push(1000-args[3]);
+                } else if (lbargs[lbargs.length - 1] === 'p') {
+                    data.values[0].split(';').forEach(e => args.push(e));
+                }
+
+                console.log(args);
+
+                const { records, buttons, pageSelecter } = await trackmaniaFacade.updateLeaderboard({
+                    groupUid: track_info.groupUid,
+                    mapUid: track_info.mapUid,
+                }, Number(args[3]), true, Number(args[4]));
+
+                let embeds = message.embeds;
+                let components = message.components;
+
+                embeds[0].fields[0] = records.field;
+                components[0].components = buttons;
+                components[1].components[0].options = records.players;
+                components[3] = pageSelecter;
+
+                body = {
+                    embeds: embeds,
+                    components: components,
+                };
             }
-            if (lbargs[lbargs.length - 1] === 'f') {
-                args.push(0);
-            } else if (lbargs[lbargs.length - 1] === 'l') {
-                args.push(1000-args[3]);
-            } else if (lbargs[lbargs.length - 1] === 'p') {
-                data.values[0].split(';').forEach((e) => {
-                    args.push(e);
-                });
-            }
-
-            const lb_info = await trackmaniaFacade.getLeaderboardInfo(track_info, args[3], true, args[4]);
-
-            log.info(args);
-
-
 
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
-                body: trackmania.embedLeaderboardInfo(lb_info),
+                body: body,
             })
             .catch(err => {
                 log.error(JSON.stringify(err));
