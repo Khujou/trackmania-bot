@@ -287,7 +287,7 @@ export class CoreService extends BaseNadeoService {
      * @param {*} seasonId 
      * @returns {Promise<any[]>}
      */
-    async getMapRecords(accountIdList, mapId, gameMode, seasonId = undefined) {
+    getMapRecords = async (accountIdList, mapId, gameMode, seasonId = undefined) => {
         console.log(gameMode);
         let endpoint = '/v2/mapRecords/?accountIdList=' +
         accountIdList.join(',') + '&mapId=' + mapId;
@@ -329,7 +329,7 @@ export class LiveService extends BaseNadeoService {
      * @param {number} [offset=0]
      * @returns {Promise<JSON>}
      */
-    async getMapLeaderboard(customId, length = 5, onlyWorld = true, offset = 0) {
+    getMapLeaderboard = async (customId, length = 5, onlyWorld = true, offset = 0) => {
         const map_leaderboard = await this.fetchEndpoint('GetMapLeaderboard', `/api/token/leaderboard/group/${customId}/top?length=${length}&onlyWorld=${onlyWorld}&offset=${offset}`).then(response => response.tops[0].top);
         return map_leaderboard;
     }
@@ -431,6 +431,8 @@ function toBase64(groupUid, timestamp = undefined) {
     return res;
 }
 
+const MAX_LEADERBOARD_GET = 1000;
+
 export class TrackmaniaFacade {
     constructor(tokenProviderFactory) {
         this.coreService = new CoreService(tokenProviderFactory);
@@ -445,7 +447,7 @@ export class TrackmaniaFacade {
      * @param {Date} [inputDate=new Date()]
      * @returns {Promise<JSON>}
      */
-    async trackOfTheDay(inputDate = new Date()) {
+    trackOfTheDay = async (inputDate = new Date()) => {
         /**
          * Obtain track of the day information, then display the track name,
          * the track author, the track thumbnail, the times for the medals,
@@ -455,6 +457,13 @@ export class TrackmaniaFacade {
         const offset = ((currDate.getUTCFullYear() - inputDate.getUTCFullYear()) * 12) + ((currDate.getUTCMonth()) - inputDate.getUTCMonth());
         const totd = await this.liveService.trackOfTheDay(offset, inputDate.getUTCDate());
         const command = `Track of the Day - ${dayOfTheWeek[totd.day]} ${monthOfTheYear[inputDate.getUTCMonth()]} ${totd.monthDay}, ${inputDate.getUTCFullYear()}`;
+
+        return {
+            command: command,
+            mapUid: totd.mapUid,
+            groupUid: totd.seasonUid,
+            endTimestamp: totd.endTimestamp,
+        };
     
         let track_info = await this.getTrackInfo(command, totd.mapUid, totd.seasonUid);
         track_info.endTimestamp = totd.endTimestamp;
@@ -468,10 +477,10 @@ export class TrackmaniaFacade {
      * @param {string} [groupUid='Personal_Best']
      * @returns {Promise<JSON>}
      */
-    async getTrackInfo(command, mapUid, groupUid = 'Personal_Best') {
+    getTrackInfo = async (command, mapUid, groupUid = 'Personal_Best') => {
         const promises = await Promise.all([
             await this.coreService.getMapInfo(undefined, mapUid).then(response => response[0]),
-            await this.exchangeService.getMapInfo(mapUid)
+            await this.exchangeService.getMapInfo(mapUid).catch(err => log.info(err)),
         ]);
 
         const nadeo_map_info = promises[0];
@@ -520,13 +529,13 @@ export class TrackmaniaFacade {
         return track_json;
     }
 
-    async cupOfTheDay() {
+    cupOfTheDay = async () => {
         let res = await this.meetService.cupOfTheDay();
         log.info(res);
         return res;
     }
 
-    async generateLeaderboardField(recordsJSON) {
+    generateLeaderboardField = async (recordsJSON) => {
         const { name, records } = recordsJSON;
         let field = {
             name: name,
@@ -562,12 +571,9 @@ export class TrackmaniaFacade {
         return res;
     }
 
-    async updateLeaderboard(lbInfo, length = 25, onlyWorld = true, offset = 0) {
-        const { groupUid, mapUid, endTimestamp } = lbInfo;
-        const { encodedGroupUid, encodedTimestamp } = toBase64(groupUid, endTimestamp);
-
+    getLeaderboard = async (custom_id, length = 25, onlyWorld = true, offset = 0)  => {
         let lb_info = [];
-        await this.liveService.getMapLeaderboard(`${groupUid}/map/${mapUid}`, length, onlyWorld, offset)
+        await this.liveService.getMapLeaderboard(custom_id, length, onlyWorld, offset)
         .then(response => response.forEach(record => {
             lb_info.push({
                 position: record.position,
@@ -575,6 +581,11 @@ export class TrackmaniaFacade {
                 time: convertMS(record.score),
             });
         }));
+        return lb_info;
+    }
+
+    updateLeaderboard = async (leaderboard, mapUid, groupUid, endTimestamp, length = 25, onlyWorld = true, offset = 0) => {
+        const { encodedGroupUid, encodedTimestamp } = toBase64(groupUid, endTimestamp);
 
         let pages = [];
         for (let i = 0; i < 25; i++) {
@@ -586,8 +597,8 @@ export class TrackmaniaFacade {
         }
 
         const recordsJSON = {
-            name: `${pages[0].label} : ${lb_info[0].position} - ${lb_info[lb_info.length-1].position}`,
-            records: lb_info,
+            name: `${pages[0].label} : ${leaderboard[0].position} - ${leaderboard[leaderboard.length-1].position}`,
+            records: leaderboard,
         };
 
         const records = await this.generateLeaderboardField(recordsJSON);
@@ -596,7 +607,7 @@ export class TrackmaniaFacade {
             type: MessageComponentTypes.BUTTON,
             style: ButtonStyleTypes.SECONDARY,
             label: 'First',
-            custom_id: `lb+${encodedTimestamp}+f;${encodedGroupUid};${mapUid};${length}`,
+            custom_id: `lb+${encodedTimestamp}+f;${encodedGroupUid};${mapUid};${length};0`,
             disabled: false,
             emoji: {
                 id: null,
@@ -626,7 +637,7 @@ export class TrackmaniaFacade {
             type: MessageComponentTypes.BUTTON,
             style: ButtonStyleTypes.SECONDARY,
             label: 'Last',
-            custom_id: `lb+${encodedTimestamp}+l;${encodedGroupUid};${mapUid};${length}`,
+            custom_id: `lb+${encodedTimestamp}+l;${encodedGroupUid};${mapUid};${length};${MAX_LEADERBOARD_GET-length}`,
             disabled: false,
             emoji: {
                 id: null,
@@ -669,13 +680,9 @@ export class TrackmaniaFacade {
      * @param {JSON} [watchedAccounts={}]
      * @returns {Promise<JSON>}
      */
-    async getLeaderboardInfo(track_info, length = 25, onlyWorld = true, offset = 0) {
-        const { groupUid, mapUid, endTimestamp, author } = track_info;
-        const { records, buttons, pageSelecter, encodedGroupUid, encodedTimestamp } = await this.updateLeaderboard({
-            groupUid: groupUid,
-            mapUid: mapUid,
-            endTimestamp: endTimestamp,
-        }, Number(length), onlyWorld, Number(offset));
+    getLeaderboardInfo = async (track_info, length = 25, onlyWorld = true, offset = 0) => {
+        const { leaderboard, groupUid, mapUid, endTimestamp, author } = track_info;
+        const { records, buttons, pageSelecter, encodedGroupUid, encodedTimestamp } = await this.updateLeaderboard(leaderboard, mapUid, groupUid, endTimestamp, Number(length), onlyWorld, Number(offset));
 
         const fields = [records.field];
 
@@ -694,7 +701,7 @@ export class TrackmaniaFacade {
         return leaderboard_info;
     }
 
-    async getWatchedAccounts(accountIdList, mapId, gameMode = 'Race', seasonId = undefined) {
+    getWatchedAccounts = async (accountIdList, mapId, gameMode = 'Race', seasonId = undefined) => {
         let records = [];
         await this.coreService.getMapRecords(accountIdList, mapId, gameMode, seasonId)
         .then(response => response.forEach(record => {
@@ -715,13 +722,14 @@ export class TrackmaniaFacade {
  * @param {JSON} track_json
  * @returns {Promise<JSON>}
  */
-export async function embedTrackInfo(live_service, track_json) {
-    const { command, title, author, authortime, goldtime, tags, website, stylename, thumbnail, mapUid, provision, mapType } = track_json;
+export async function embedTrackInfo(track_json) {
+    const { command, title, author, firstPlace, authortime, goldtime, tags, website, stylename, thumbnail, mapUid, provision, mapType } = track_json;
 
-    const medal_times = 
-        `:first_place: ${await live_service.getMapLeaderboard(`Personal_Best/map/${mapUid}`, 1).then(response => convertMS(response[0].score))}\n` +
-        `:green_circle: ${authortime}\n` +
-        `:yellow_circle: ${goldtime}`;
+    const medal_times = [
+        `:first_place: ${firstPlace}`,
+        `:green_circle: ${authortime}`,
+        `:yellow_circle: ${goldtime}`
+    ].join('\n');
 
     let tags_str = '';
     if (tags !== null) {

@@ -10,7 +10,7 @@ import {
 } from 'discord-interactions';
 import * as schedule from 'node-schedule';
 import * as trackmania from './trackmania.js';
-import { DiscordRequest, convertNumberToBase } from './utils.js';
+import { DiscordRequest, convertMillisecondsToFormattedTime, convertNumberToBase } from './utils.js';
 import { MongoClient, ServerApiVersion } from 'mongodb';
 import * as fs from 'fs';
 import { setLogLevel, getLogger, logProfile } from './log.js';
@@ -161,28 +161,32 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 /* data: { flags: InteractionResponseFlags.EPHEMERAL, } */
             });
 
-            let track_json = null;
-            const totdDate = new Date();
+            let track_json;
+            let dateArg = new Date();
             if (options[0].name === 'past') {
                 const fields = options[0].options;
-                let inputDate = new Date(fields[0].value, fields[1].value - 1, fields[2].value);
-                if (inputDate > totdDate)
-                    inputDate = totdDate;
-                else if (inputDate < startDate)
+                const inputDate = new Date(fields[0].value, fields[1].value - 1, fields[2].value);
+                dateArg = (inputDate < dateArg) ? inputDate : dateArg;
+                if (inputDate < startDate)
                     embeddedErrorMessage(endpoint, Error('Date given is before Trackmania came out, silly :)'));
 
-                track_json = await trackmaniaFacade.trackOfTheDay(inputDate).catch(err => embeddedErrorMessage(endpoint, err));
-            } else {
-                log.debug('about to open file');
-                track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
-                log.debug('finished file ops');
-            }
+                const { command, mapUid, groupUid, endTimestamp } = await trackmaniaFacade.trackOfTheDay(dateArg).catch(err => embeddedErrorMessage(endpoint, err));
+                const api_calls = await Promise.all([
+                    trackmaniaFacade.getTrackInfo(command, mapUid, groupUid),
+                    trackmaniaFacade.getLeaderboard(`Personal_Best/map/${mapUid}`, 1).then(response => response[0].time ),
+                ]);
+                track_json = api_calls[0];
+                track_json.endTimestamp = endTimestamp;
+                track_json.firstPlace = api_calls[1];
 
-            log.debug(track_json);
+            } else {
+                track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
+                track_json.firstPlace = await trackmaniaFacade.getLeaderboard(`Personal_Best/map/${track_json.mapUid}`, 1).then(response => response[0].time );
+            }
             
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
-                body: await trackmania.embedTrackInfo(trackmaniaFacade.liveService, track_json),
+                body: await trackmania.embedTrackInfo(track_json),
             })
             .catch(err => embeddedErrorMessage(endpoint, err));
         }
@@ -192,70 +196,93 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
     if (type === InteractionType.MESSAGE_COMPONENT) {
         console.log(message.interaction);
         const endpoint = `channels/${message.channel_id}/messages/${message.id}`;
-        const args = data.custom_id.split(';');
-
+        const params = data.custom_id.split(';');
+        const command_queries = params[0].split('+');
+        const updatePath = command_queries[0]; //no clue what to call this
 
         res.send({
             type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE,
         });
 
-        if (args[0] === 'test') {
+        if (updatePath === 'test') {
             log.info(message);
         }
 
-        else if (args[0] === 'cotd') {
+        else if (updatePath === 'cotd') {
             const res = await trackmaniaFacade.cupOfTheDay();
             log.info(res);
         }
 
-        else if (args[0].slice(0,2) === 'lb') {
-            log.info(args);
-            let groupUid = args[1];
-            if (groupUid !== 'Personal_Best') {
-                groupUid = revertUID(groupUid);
-            }
+        else if (updatePath === 'lb') {
+            log.info(params);
 
-            const track_info = {
+            const embedChangeState = command_queries[command_queries.length - 1];
+
+            const track_json = {
                 author: message.embeds[0].author.name,
-                groupUid: groupUid,
-                mapUid: args[2],
+                groupUid: (params[1] !== 'Personal_Best') ? revertUID(params[1]) : params[1],
+                mapUid: params[2],
+                endTimestamp: undefined,
             };
 
-            const lbargs = args[0].split('+');
-            if (lbargs[1] === 'totd') track_info.endTimestamp = Number(convertNumberToBase(lbargs[2], 64, 10));
+            if (command_queries[1] === 'totd') { track_json.endTimestamp = Number(convertNumberToBase(command_queries[2], 64, 10)); }
             let body;
-            if (lbargs[lbargs.length - 1] ==='i') {
-                let leaderboard = await trackmaniaFacade.getLeaderboardInfo(track_info, args[3], true, args[4]);
+
+            
+            if (embedChangeState === 'i') { // 'i' for initialize 🤓
                 const userId = message.interaction.user.id;
-                const userName = message.interaction.user.global_name;
-                if (accountWatchers[userId] !== undefined) {
-                    const mapType = lbargs[lbargs.length-3];
-                    const watchedRecords = await trackmaniaFacade.getWatchedAccounts(accountWatchers[userId], revertUID(lbargs[lbargs.length-2], mapType));
-                    console.log(watchedRecords);
-                    const watchingLB = await trackmaniaFacade.generateLeaderboardField({
-                        name: `${userName}'s Watched Players`,
-                        records: watchedRecords,
-                    });
-                    leaderboard.fields.push(watchingLB.field);
-                    leaderboard.watchedAccounts = watchingLB.players;
+                const userName = message.interaction.user.username;
+                const length = Number(params[3]);
+                const offset = Number(params[4]);
+                let getLeaderboards = [trackmaniaFacade.getLeaderboard];
+                let getLeaderboardsArgs = {
+                    "0": [`${track_json.groupUid}/map/${track_json.mapUid}`, length, true, offset],
+                };
+                let FEGens = [trackmaniaFacade.getLeaderboardInfo];
+                let FEGensArgs = {};
+                if (accountWatchers.hasOwnProperty(userId) && accountWatchers[userId].length > 0) {
+                    const mapType = command_queries[command_queries.length-3];
+                    const mapId = revertUID(command_queries[command_queries.length-2]);
+                    getLeaderboards.push(trackmaniaFacade.getWatchedAccounts);
+                    getLeaderboardsArgs['1'] = [accountWatchers[userId], mapId, mapType];
+                    FEGens.push(trackmaniaFacade.generateLeaderboardField);
                 }
-                body = trackmania.embedLeaderboardInfo(leaderboard);
+
+                const leaderboards = await Promise.all(
+                    getLeaderboards.map((e, i) => e(...getLeaderboardsArgs[i]))
+                ).catch(err => embeddedErrorMessage(endpoint, err));
+                track_json.leaderboard = leaderboards[0];
+                FEGensArgs['0'] = [track_json, length, true, offset];
+                if (leaderboards.length > 1) {
+                    FEGensArgs['1'] = [{ name: `${userName}'s Watched Players`, records: leaderboards[1] }];
+                }
+
+                const FEs = await Promise.all(
+                    FEGens.map((e,i) => e(...FEGensArgs[i]))
+                ).catch(err => embeddedErrorMessage(endpoint, err));
+                let embed = FEs[0];
+                if (FEs.length > 1) {
+                    embed.fields.push(FEs[1].field);
+                    embed.watchedAccounts = FEs[1].players;
+                }
+
+                body = trackmania.embedLeaderboardInfo(embed);
+
             } else {
-                console.log(lbargs);
-                if (lbargs[lbargs.length - 1] === 'f') {
-                    args.push(0);
-                } else if (lbargs[lbargs.length - 1] === 'l') {
-                    args.push(1000-args[3]);
-                } else if (lbargs[lbargs.length - 1] === 'p') {
-                    data.values[0].split(';').forEach(e => args.push(e));
+                let args = [];
+                switch (embedChangeState) {
+                    case 'p': // p for page selector
+                        args = data.values[0].split(';');
+                        break;
+                    default:
+                        args = [params[3], params[4]];
                 }
+                const length = Number(args[0]);
+                const offset = Number(args[1]);
 
-                console.log(args);
+                const leaderboard = await trackmaniaFacade.getLeaderboard(`${track_json.groupUid}/map/${track_json.mapUid}`, length, true, offset);
 
-                const { records, buttons, pageSelecter } = await trackmaniaFacade.updateLeaderboard({
-                    groupUid: track_info.groupUid,
-                    mapUid: track_info.mapUid,
-                }, Number(args[3]), true, Number(args[4]));
+                const { records, buttons, pageSelecter } = await trackmaniaFacade.updateLeaderboard(leaderboard, track_json.mapUid, track_json.groupUid, track_json.endTimestamp, length, true, offset);
 
                 let embeds = message.embeds;
                 let components = message.components;
@@ -281,29 +308,35 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             });
         }
         
-        else if (args[0].slice(0, 5) === 'track') {
-            const targs = args[0].split('+');
-            console.log(targs);
-            console.log(args);
-            const groupUid = revertUID(args[1]);
-            let command;
-            let track_info;
-            if (targs[1] === 'totd') { 
-                command = `Track of the Day - ${args[3]}`;
-                if (Number(convertNumberToBase(targs[2], 64, 10)) > Math.floor(Date.now() / 1000)) 
-                    track_info = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
-                else track_info = await trackmaniaFacade.getTrackInfo(command, args[2], groupUid).catch(err => embeddedErrorMessage(endpoint, err));
+        else if (updatePath === 'track') {
+            const groupUid = revertUID(params[1]);
+            const mapUid = params[2];
+            const isTOTD = command_queries.length > 1 && command_queries[1] === 'totd';
+            const command = (isTOTD) ? `Track of the Day - ${params[3]}` : 'Map Search';
+            const endTimestamp = (isTOTD) ? Number(convertNumberToBase(command_queries[2], 64, 10)) : 0;
+            let track_json;
+            let api_calls;
+            if (isTOTD && endTimestamp > Math.floor(Date.now() / 1000)) {
+                api_calls = await Promise.all([
+                    cachingTOTDProvider.getData(),
+                    trackmaniaFacade.getLeaderboard(`Personal_Best/map/${mapUid}`, 1).then(response => response[0].time)
+                ]).catch(err => embeddedErrorMessage(endpoint, err));
             }
-            else { 
-                command = 'Map Search';
-                track_info = await trackmaniaFacade.getTrackInfo(command, args[2], groupUid).catch(err => embeddedErrorMessage(endpoint, err));
+            else {
+                api_calls = await Promise.all([
+                    trackmaniaFacade.getTrackInfo(command, mapUid, groupUid),
+                    trackmaniaFacade.getLeaderboard(`Personal_Best/map/${mapUid}`, 1).then(response => response[0].time)
+                ]);
             }
+            track_json = api_calls[0];
+            track_json.firstPlace = api_calls[1];
+            track_json.endTimestamp = endTimestamp;
 
-            log.info(track_info);
+            log.info(track_json);
 
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
-                body: await trackmania.embedTrackInfo(trackmaniaFacade.liveService, track_info),
+                body: await trackmania.embedTrackInfo(track_json),
             })
             .catch(err => embeddedErrorMessage(endpoint, err));
         }
