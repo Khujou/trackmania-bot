@@ -54,7 +54,12 @@ const trackmaniaFacade = new trackmania.TrackmaniaFacade(tokenProviderFactory);
 const cachingTOTDProvider = new trackmania.FileBasedCachingJSONDataProvider('totd.json',
     undefined,
     (trackInfo) => trackInfo.endTimestamp < (Math.floor(Date.now() / 1000)),
-    () => trackmaniaFacade.trackOfTheDay());
+    async () => { 
+        const { command, mapUid, groupUid, endTimestamp } = await trackmaniaFacade.trackOfTheDay();
+        let track_json = await trackmaniaFacade.getTrackInfo(command, mapUid, groupUid);
+        track_json.endTimestamp = endTimestamp;
+        return track_json;
+    });
 const debugData = await logProfile(log, 'GetCachedTmData', () => cachingTOTDProvider.getData());
 log.info(JSON.stringify(debugData));
 
@@ -183,10 +188,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
                 track_json.firstPlace = await trackmaniaFacade.getLeaderboard(`Personal_Best/map/${track_json.mapUid}`, 1).then(response => response[0].time );
             }
+
+            console.log(track_json);
             
             await DiscordRequest(endpoint, {
                 method: 'PATCH',
-                body: await trackmania.embedTrackInfo(track_json),
+                body: trackmania.embedTrackInfo(track_json),
             })
             .catch(err => embeddedErrorMessage(endpoint, err));
         }
@@ -356,10 +363,13 @@ function revertUID(UID) {
 }
 
 const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
+    let track_json;
+    track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
+    track_json.firstPlace = await trackmaniaFacade.getLeaderboard(`Personal_Best/map/${track_json.mapUid}`, 1).then(response => response[0].time );
     await DiscordRequest(`channels/${totd_channel}/messages`, {
         method: 'POST',
-        body: await trackmaniaFacade.trackOfTheDay(),
-    });
+        body: trackmania.embedTrackInfo(track_json),
+    }).catch(err => console.log(err));
 });
 
 async function embeddedErrorMessage(endpoint, err) {

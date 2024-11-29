@@ -722,7 +722,7 @@ export class TrackmaniaFacade {
  * @param {JSON} track_json
  * @returns {Promise<JSON>}
  */
-export async function embedTrackInfo(track_json) {
+export function embedTrackInfo(track_json) {
     const { command, title, author, firstPlace, authortime, goldtime, tags, website, stylename, thumbnail, mapUid, provision, mapType } = track_json;
 
     const medal_times = [
