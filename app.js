@@ -74,6 +74,8 @@ app.get('/', (req, res) => {
 app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (req, res) => {
     // Interaction type and data
     const { type, id, data, token, message } = req.body;
+    const C_endpoint = `webhooks/${process.env.APP_ID}/${token}`;
+    const RUD_endpoint = `${C_endpoint}/messages/@original`;
 
     // Handle verification requests
     if (type === InteractionResponseType.PING) {
@@ -83,14 +85,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
     // Handle slash command requests
     if (type === InteractionType.APPLICATION_COMMAND) {
         const { name, options } = data;
-        const postendpoint = `webhooks/${process.env.APP_ID}/${token}`;
-        const endpoint = `${postendpoint}/messages/@original`;
 
         if (name === 'test') {
             res.send({
                 type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
             })
-            await DiscordRequest(endpoint, {
+            await DiscordRequest(RUD_endpoint, {
                 method: 'PATCH',
                 body: {
                     content: 'hello world',
@@ -156,14 +156,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                     },
                 });
             } catch (err) {
-                embeddedErrorMessage(endpoint, err);
+                embeddedErrorMessage(RUD_endpoint, err);
             }
         }
 
         else if (name === 'totd') {
             res.send({
                 type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-                /* data: { flags: InteractionResponseFlags.EPHEMERAL, } */
+                data: { flags: InteractionResponseFlags.EPHEMERAL, },
             });
 
             let track_json;
@@ -173,9 +173,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 const inputDate = new Date(fields[0].value, fields[1].value - 1, fields[2].value);
                 dateArg = (inputDate < dateArg) ? inputDate : dateArg;
                 if (inputDate < startDate)
-                    embeddedErrorMessage(endpoint, Error('Date given is before Trackmania came out, silly :)'));
+                    embeddedErrorMessage(RUD_endpoint, Error('Date given is before Trackmania came out, silly :)'));
 
-                const { command, mapUid, groupUid, endTimestamp } = await trackmaniaFacade.trackOfTheDay(dateArg).catch(err => embeddedErrorMessage(endpoint, err));
+                const { command, mapUid, groupUid, endTimestamp } = await trackmaniaFacade.trackOfTheDay(dateArg).catch(err => embeddedErrorMessage(RUD_endpoint, err));
                 const api_calls = await Promise.all([
                     trackmaniaFacade.getTrackInfo(command, mapUid, groupUid),
                     trackmaniaFacade.getLeaderboard(`Personal_Best/map/${mapUid}`, 1).then(response => response[0].time ),
@@ -185,31 +185,27 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 track_json.firstPlace = api_calls[1];
 
             } else {
-                track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
+                track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(RUD_endpoint, err));
                 track_json.firstPlace = await trackmaniaFacade.getLeaderboard(`Personal_Best/map/${track_json.mapUid}`, 1).then(response => response[0].time );
             }
 
             console.log(track_json);
             
-            await DiscordRequest(endpoint, {
+            await DiscordRequest(RUD_endpoint, {
                 method: 'PATCH',
                 body: trackmania.embedTrackInfo(track_json),
             })
-            .catch(err => embeddedErrorMessage(endpoint, err));
+            .catch(err => embeddedErrorMessage(RUD_endpoint, err));
         }
 
     }
 
     if (type === InteractionType.MESSAGE_COMPONENT) {
-        console.log(message.interaction);
-        const endpoint = `channels/${message.channel_id}/messages/${message.id}`;
+        const postendpoint = `channels/${message.channel_id}/messages`;
+        const endpoint = `${postendpoint}}/${message.id}`;
         const params = data.custom_id.split(';');
         const command_queries = params[0].split('+');
         const updatePath = command_queries[0]; //no clue what to call this
-
-        res.send({
-            type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE,
-        });
 
         if (updatePath === 'test') {
             log.info(message);
@@ -221,6 +217,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         }
 
         else if (updatePath === 'lb') {
+            
             log.info(params);
 
             const embedChangeState = command_queries[command_queries.length - 1];
@@ -235,47 +232,60 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             if (command_queries[1] === 'totd') { track_json.endTimestamp = Number(convertNumberToBase(command_queries[2], 64, 10)); }
             let body;
 
+            const endpoints = [RUD_endpoint, C_endpoint];
+            const methods = ['PATCH', 'POST'];
+            let method = 0;
             
             if (embedChangeState === 'i') { // 'i' for initialize 🤓
-                const userId = message.interaction.user.id;
-                const userName = message.interaction.user.username;
+                res.send({
+                    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+                    data: { flags: InteractionResponseFlags.EPHEMERAL, },
+                });
+                method = 1;
+                const userId = message.interaction_metadata.user.id;
+                const userName = message.interaction_metadata.user.username;
                 const length = Number(params[3]);
                 const offset = Number(params[4]);
                 let getLeaderboards = [trackmaniaFacade.getLeaderboard];
                 let getLeaderboardsArgs = {
                     "0": [`${track_json.groupUid}/map/${track_json.mapUid}`, length, true, offset],
                 };
-                let FEGens = [trackmaniaFacade.getLeaderboardInfo];
+                let FEGens = [trackmaniaFacade.getLeaderboardInfo, trackmaniaFacade.generateLeaderboardField];
                 let FEGensArgs = {};
                 if (accountWatchers.hasOwnProperty(userId) && accountWatchers[userId].length > 0) {
                     const mapType = command_queries[command_queries.length-3];
                     const mapId = revertUID(command_queries[command_queries.length-2]);
                     getLeaderboards.push(trackmaniaFacade.getWatchedAccounts);
                     getLeaderboardsArgs['1'] = [accountWatchers[userId], mapId, mapType];
-                    FEGens.push(trackmaniaFacade.generateLeaderboardField);
                 }
 
                 const leaderboards = await Promise.all(
                     getLeaderboards.map((e, i) => e(...getLeaderboardsArgs[i]))
-                ).catch(err => embeddedErrorMessage(endpoint, err));
+                ).catch(err => embeddedErrorMessage(C_endpoint, err));
+
                 track_json.leaderboard = leaderboards[0];
                 FEGensArgs['0'] = [track_json, length, true, offset];
-                if (leaderboards.length > 1) {
-                    FEGensArgs['1'] = [{ name: `${userName}'s Watched Players`, records: leaderboards[1] }];
-                }
+                FEGensArgs['1'] = [{ name: `${userName}'s Watched Players`, }];
+                FEGensArgs['1'][0].records = (leaderboards.length > 1) ? leaderboards[1] : [];
+                console.log(FEGensArgs['1']);
 
                 const FEs = await Promise.all(
                     FEGens.map((e,i) => e(...FEGensArgs[i]))
-                ).catch(err => embeddedErrorMessage(endpoint, err));
+                ).catch(err => embeddedErrorMessage(C_endpoint, err));
+
                 let embed = FEs[0];
                 if (FEs.length > 1) {
                     embed.fields.push(FEs[1].field);
                     embed.watchedAccounts = FEs[1].players;
                 }
+                console.log(embed);
 
                 body = trackmania.embedLeaderboardInfo(embed);
 
             } else {
+                res.send({
+                    type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE,
+                });
                 let args = [];
                 switch (embedChangeState) {
                     case 'p': // p for page selector
@@ -305,17 +315,21 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 };
             }
 
-            await DiscordRequest(endpoint, {
-                method: 'PATCH',
+            await DiscordRequest(endpoints[method], {
+                method: methods[method],
                 body: body,
             })
             .catch(err => {
                 log.error(JSON.stringify(err));
-                embeddedErrorMessage(endpoint, err)
+                embeddedErrorMessage(C_endpoint, err)
             });
         }
         
         else if (updatePath === 'track') {
+            res.send({
+                type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+                data: { flags: InteractionResponseFlags.EPHEMERAL, },
+            });
             const groupUid = revertUID(params[1]);
             const mapUid = params[2];
             const isTOTD = command_queries.length > 1 && command_queries[1] === 'totd';
@@ -327,7 +341,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 api_calls = await Promise.all([
                     cachingTOTDProvider.getData(),
                     trackmaniaFacade.getLeaderboard(`Personal_Best/map/${mapUid}`, 1).then(response => response[0].time)
-                ]).catch(err => embeddedErrorMessage(endpoint, err));
+                ]).catch(err => embeddedErrorMessage(C_endpoint, err));
             }
             else {
                 api_calls = await Promise.all([
@@ -341,11 +355,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
             log.info(track_json);
 
-            await DiscordRequest(endpoint, {
-                method: 'PATCH',
+            await DiscordRequest(C_endpoint, {
+                method: 'POST',
                 body: await trackmania.embedTrackInfo(track_json),
             })
-            .catch(err => embeddedErrorMessage(endpoint, err));
+            .catch(err => embeddedErrorMessage(C_endpoint, err));
         }
 
     }
@@ -374,9 +388,8 @@ const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
 
 async function embeddedErrorMessage(endpoint, err) {
     log.info(err.stack);
-    try {
         await DiscordRequest(endpoint, {
-            method: 'PATCH',
+            method: 'POST',
             body: {
                 flags: InteractionResponseFlags.EPHEMERAL,
                 embeds: [{
@@ -397,10 +410,7 @@ async function embeddedErrorMessage(endpoint, err) {
                     }],
                 }],
             }
-        });
-    } catch (error) {
-        log.error(`Error sending error message: ${error}`);
-    }
+        }).catch((error) => log.error(`Error sending error message: ${error}`));
 }
 
 
