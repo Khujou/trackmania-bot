@@ -535,6 +535,8 @@ export class TrackmaniaFacade {
         return res;
     }
 
+    
+
     generateLeaderboardField = async (recordsJSON) => {
         const { name, records } = recordsJSON;
         let field = {

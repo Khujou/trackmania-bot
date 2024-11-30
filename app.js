@@ -73,7 +73,7 @@ app.get('/', (req, res) => {
 // Interactions endpoint URL where Discord will send HTTP requests
 app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (req, res) => {
     // Interaction type and data
-    const { type, id, data, token, message } = req.body;
+    const { type, id, data, token, message, member } = req.body;
     const C_endpoint = `webhooks/${process.env.APP_ID}/${token}`;
     const RUD_endpoint = `${C_endpoint}/messages/@original`;
 
@@ -188,8 +188,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(RUD_endpoint, err));
                 track_json.firstPlace = await trackmaniaFacade.getLeaderboard(`Personal_Best/map/${track_json.mapUid}`, 1).then(response => response[0].time );
             }
-
-            console.log(track_json);
             
             await DiscordRequest(RUD_endpoint, {
                 method: 'PATCH',
@@ -242,8 +240,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                     data: { flags: InteractionResponseFlags.EPHEMERAL, },
                 });
                 method = 1;
-                const userId = message.interaction_metadata.user.id;
-                const userName = message.interaction_metadata.user.username;
+                const userId = member.user.id;
+                const userName = member.user.username;
                 const length = Number(params[3]);
                 const offset = Number(params[4]);
                 let getLeaderboards = [trackmaniaFacade.getLeaderboard];
@@ -267,7 +265,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 FEGensArgs['0'] = [track_json, length, true, offset];
                 FEGensArgs['1'] = [{ name: `${userName}'s Watched Players`, }];
                 FEGensArgs['1'][0].records = (leaderboards.length > 1) ? leaderboards[1] : [];
-                console.log(FEGensArgs['1']);
 
                 const FEs = await Promise.all(
                     FEGens.map((e,i) => e(...FEGensArgs[i]))
@@ -278,7 +275,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                     embed.fields.push(FEs[1].field);
                     embed.watchedAccounts = FEs[1].players;
                 }
-                console.log(embed);
 
                 body = trackmania.embedLeaderboardInfo(embed);
 
@@ -376,7 +372,7 @@ function revertUID(UID) {
     return arr.join('-');
 }
 
-const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
+const daily_totd = schedule.scheduleJob('9 22 * * *', async() => {
     let track_json;
     track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
     track_json.firstPlace = await trackmaniaFacade.getLeaderboard(`Personal_Best/map/${track_json.mapUid}`, 1).then(response => response[0].time );
