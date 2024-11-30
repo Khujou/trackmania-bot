@@ -372,7 +372,7 @@ function revertUID(UID) {
     return arr.join('-');
 }
 
-const daily_totd = schedule.scheduleJob('9 22 * * *', async() => {
+const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
     let track_json;
     track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
     track_json.firstPlace = await trackmaniaFacade.getLeaderboard(`Personal_Best/map/${track_json.mapUid}`, 1).then(response => response[0].time );
