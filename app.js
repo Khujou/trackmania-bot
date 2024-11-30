@@ -143,7 +143,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                     },
                     ],
                 }
-            }).catch(err => embeddedErrorMessage(endpoint, err));
+            }).catch(err => embeddedErrorMessage(RUD_endpoint, err));
         }
 
         else if (name ==='tucker') {
@@ -259,7 +259,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
                 const leaderboards = await Promise.all(
                     getLeaderboards.map((e, i) => e(...getLeaderboardsArgs[i]))
-                ).catch(err => embeddedErrorMessage(C_endpoint, err));
+                ).catch(err => embeddedErrorMessage(RUD_endpoint, err));
 
                 track_json.leaderboard = leaderboards[0];
                 FEGensArgs['0'] = [track_json, length, true, offset];
@@ -268,7 +268,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
                 const FEs = await Promise.all(
                     FEGens.map((e,i) => e(...FEGensArgs[i]))
-                ).catch(err => embeddedErrorMessage(C_endpoint, err));
+                ).catch(err => embeddedErrorMessage(RUD_endpoint, err));
 
                 let embed = FEs[0];
                 if (FEs.length > 1) {
@@ -317,7 +317,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             })
             .catch(err => {
                 log.error(JSON.stringify(err));
-                embeddedErrorMessage(C_endpoint, err)
+                embeddedErrorMessage(RUD_endpoint, err)
             });
         }
         
@@ -337,7 +337,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 api_calls = await Promise.all([
                     cachingTOTDProvider.getData(),
                     trackmaniaFacade.getLeaderboard(`Personal_Best/map/${mapUid}`, 1).then(response => response[0].time)
-                ]).catch(err => embeddedErrorMessage(C_endpoint, err));
+                ]).catch(err => embeddedErrorMessage(RUD_endpoint, err));
             }
             else {
                 api_calls = await Promise.all([
@@ -355,7 +355,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 method: 'POST',
                 body: await trackmania.embedTrackInfo(track_json),
             })
-            .catch(err => embeddedErrorMessage(C_endpoint, err));
+            .catch(err => embeddedErrorMessage(RUD_endpoint, err));
         }
 
     }
@@ -385,7 +385,7 @@ const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
 async function embeddedErrorMessage(endpoint, err) {
     log.info(err.stack);
         await DiscordRequest(endpoint, {
-            method: 'POST',
+            method: 'PATCH',
             body: {
                 flags: InteractionResponseFlags.EPHEMERAL,
                 embeds: [{
