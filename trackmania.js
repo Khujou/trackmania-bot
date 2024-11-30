@@ -535,6 +535,8 @@ export class TrackmaniaFacade {
         return res;
     }
 
+    
+
     generateLeaderboardField = async (recordsJSON) => {
         const { name, records } = recordsJSON;
         let field = {
@@ -694,7 +696,7 @@ export class TrackmaniaFacade {
             fields: fields,
             buttons: buttons,
             accounts: records.players,
-            watchedAccounts: ['no players'],
+            watchedAccounts: [{label: 'no players', value: 'na'}],
             pageSelecter: pageSelecter,
         };
 
@@ -822,6 +824,7 @@ export function embedLeaderboardInfo(lb_info) {
             custom_id: 'acc+lb',
             placeholder: 'Search info of a Player',
             options: accounts,
+            disabled: (accounts[0].value === 'na'),
         }],
     },{
         type: MessageComponentTypes.ACTION_ROW,
@@ -830,6 +833,7 @@ export function embedLeaderboardInfo(lb_info) {
             custom_id: 'acc+w',
             placeholder: 'Search info of a Watched Player',
             options: watchedAccounts,
+            disabled: (watchedAccounts[0].value === 'na'),
         }],
     }, pageSelecter, {
         type: MessageComponentTypes.ACTION_ROW,
