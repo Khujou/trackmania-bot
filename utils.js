@@ -108,6 +108,6 @@ export function convertNumberToBase(str, fromBase, toBase, targetLen = 0) {
  */
 export function getDate() {
     let date = new Date();
-    date.setUTCHours(-13);
+    date.setUTCHours(-18);
     return date;
 }
