@@ -66,6 +66,16 @@ log.info(JSON.stringify(debugData));
 const startDate = new Date(2020, 6, 1);
 let totd_channel = '1183478764856942642';
 
+const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
+    let track_json;
+    track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
+    track_json.firstPlace = await trackmaniaFacade.getLeaderboard(`Personal_Best/map/${track_json.mapUid}`, 1).then(response => response[0].time );
+    await DiscordRequest(`channels/${totd_channel}/messages`, {
+        method: 'POST',
+        body: trackmania.embedTrackInfo(track_json),
+    }).catch(err => console.log(err));
+});
+
 app.get('/', (req, res) => {
     res.send('whats up');
 });
@@ -403,16 +413,6 @@ function revertUID(UID) {
         arr.push(UID.slice(UID_DASH_INDICES[i-1], UID_DASH_INDICES[i]));
     return arr.join('-');
 }
-
-const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
-    let track_json;
-    track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
-    track_json.firstPlace = await trackmaniaFacade.getLeaderboard(`Personal_Best/map/${track_json.mapUid}`, 1).then(response => response[0].time );
-    await DiscordRequest(`channels/${totd_channel}/messages`, {
-        method: 'POST',
-        body: trackmania.embedTrackInfo(track_json),
-    }).catch(err => console.log(err));
-});
 
 async function embeddedErrorMessage(endpoint, err) {
     log.info(err.stack);
