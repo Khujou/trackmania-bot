@@ -100,3 +100,14 @@ export function convertNumberToBase(str, fromBase, toBase, targetLen = 0) {
     res = res.padStart(targetLen, '0');
     return res;
 }
+
+/**
+ * Gets the date, with the time pushed back 13 hours :)
+ * @param {*} yearsAgo 
+ * @param {*} monthsAgo 
+ */
+export function getDate() {
+    let date = new Date();
+    date.setUTCHours(-13);
+    return date;
+}

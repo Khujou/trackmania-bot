@@ -10,7 +10,7 @@ import {
 } from 'discord-interactions';
 import * as schedule from 'node-schedule';
 import * as trackmania from './trackmania.js';
-import { DiscordRequest, convertMillisecondsToFormattedTime, convertNumberToBase } from './utils.js';
+import { DiscordRequest, convertNumberToBase, getDate } from './utils.js';
 import { MongoClient, ServerApiVersion } from 'mongodb';
 import * as fs from 'fs';
 import { setLogLevel, getLogger, logProfile } from './log.js';
@@ -166,10 +166,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 data: { flags: InteractionResponseFlags.EPHEMERAL, },
             });
 
-            let track_json;
+            let track_json = {};
             let callbacks = [trackmaniaFacade.getLeaderboard];
             let callbackArgs = {};
-            let dateArg = new Date();
+            let dateArg = getDate();
             if (options[0].name === 'past') {
                 const fields = options[0].options;
                 const inputDate = new Date(fields[0].value, fields[1].value - 1, fields[2].value);
