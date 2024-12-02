@@ -615,7 +615,7 @@ export class TrackmaniaFacade {
         const leaderboardKeys = Object.keys(leaderboard);
 
         const recordsJSON = {
-            name: `${pages[0].label} : ${leaderboard[leaderboardKeys[0]].position} - ${leaderboard[leaderboardKeys[length-1]].position}`,
+            name: `${pages[0].label} : ${leaderboard[leaderboardKeys[0]]?.position} - ${leaderboard[leaderboardKeys[leaderboardKeys.length-1]]?.position}`,
             records: leaderboard,
         };
 
