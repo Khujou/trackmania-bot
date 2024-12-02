@@ -5,7 +5,7 @@ import * as NodeCache from 'node-cache';
 import * as schedule from 'node-schedule';
 import * as fs from 'node:fs';
 import { getLogger, logProfile } from './log.js';
-import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase } from './utils.js';
+import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase, getDate } from './utils.js';
 
 const log = getLogger();
 
@@ -449,12 +449,11 @@ export class TrackmaniaFacade {
      */
     trackOfTheDay = async (inputDate = new Date()) => {
         /**
-         * Obtain track of the day information, then display the track name,
-         * the track author, the track thumbnail, the times for the medals,
-         * the style of the track (using trackmania.exchange), and the leaderboard.
+         * Obtain track of the day information
          */
-        const currDate = new Date();
+        const currDate = getDate();
         const offset = ((currDate.getUTCFullYear() - inputDate.getUTCFullYear()) * 12) + ((currDate.getUTCMonth()) - inputDate.getUTCMonth());
+        console.log(offset);
         const totd = await this.liveService.trackOfTheDay(offset, inputDate.getUTCDate());
         const command = `Track of the Day - ${dayOfTheWeek[totd.day]} ${monthOfTheYear[inputDate.getUTCMonth()]} ${totd.monthDay}, ${inputDate.getUTCFullYear()}`;
 
@@ -464,10 +463,6 @@ export class TrackmaniaFacade {
             groupUid: totd.seasonUid,
             endTimestamp: totd.endTimestamp,
         };
-    
-        let track_info = await this.getTrackInfo(command, totd.mapUid, totd.seasonUid);
-        track_info.endTimestamp = totd.endTimestamp;
-        return track_info;
     }
 
     /**
