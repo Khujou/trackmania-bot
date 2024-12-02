@@ -5,7 +5,7 @@ import * as NodeCache from 'node-cache';
 import * as schedule from 'node-schedule';
 import * as fs from 'node:fs';
 import { getLogger, logProfile } from './log.js';
-import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase } from './utils.js';
+import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase, getDate } from './utils.js';
 
 const log = getLogger();
 
@@ -384,8 +384,8 @@ export class TrackmaniaOAuthService extends BaseService {
     /**
      * https://webservices.openplanet.dev/oauth/reference/accounts/id-to-name
      *
-     * @param {Array<String>} account_ids
-     * @returns {Promise<JSON>}
+     * @param {string[]} account_ids
+     * @returns {Promise<{}>}
      */
     async fetchAccountNames(account_ids) {
         const query = account_ids
@@ -449,12 +449,11 @@ export class TrackmaniaFacade {
      */
     trackOfTheDay = async (inputDate = new Date()) => {
         /**
-         * Obtain track of the day information, then display the track name,
-         * the track author, the track thumbnail, the times for the medals,
-         * the style of the track (using trackmania.exchange), and the leaderboard.
+         * Obtain track of the day information
          */
-        const currDate = new Date();
+        const currDate = getDate();
         const offset = ((currDate.getUTCFullYear() - inputDate.getUTCFullYear()) * 12) + ((currDate.getUTCMonth()) - inputDate.getUTCMonth());
+        console.log(offset);
         const totd = await this.liveService.trackOfTheDay(offset, inputDate.getUTCDate());
         const command = `Track of the Day - ${dayOfTheWeek[totd.day]} ${monthOfTheYear[inputDate.getUTCMonth()]} ${totd.monthDay}, ${inputDate.getUTCFullYear()}`;
 
@@ -464,10 +463,6 @@ export class TrackmaniaFacade {
             groupUid: totd.seasonUid,
             endTimestamp: totd.endTimestamp,
         };
-    
-        let track_info = await this.getTrackInfo(command, totd.mapUid, totd.seasonUid);
-        track_info.endTimestamp = totd.endTimestamp;
-        return track_info;
     }
 
     /**
@@ -518,7 +513,7 @@ export class TrackmaniaFacade {
             track_json.provision += ' and Trackmania.Exchange';
         } else {
             log.error('Couldn\'t retrieve data from trackmania.exchange');
-            track_json.author = await this.oauthService.fetchAccountNames([nadeo_map_info.author])
+            track_json.author = await this.getAccountName([nadeo_map_info.author])
             .then(response => response[nadeo_map_info.author])
             .catch(err => {
                 log.error('Can\'t get author WTF', err);
@@ -535,25 +530,52 @@ export class TrackmaniaFacade {
         return res;
     }
 
-    
+    getAccountName = async (accountIds) => {
+        return await this.oauthService.fetchAccountNames(accountIds);
+    }
 
-    generateLeaderboardField = async (recordsJSON) => {
+    /**
+     * 
+     * @param {Callback} callback 
+     * @param {any[]} args 
+     * @param {Callback} getTime 
+     * @returns {Promise<{}>}
+     */
+    getMapRecords = async (callback, args, getTime) => {
+        let records = {};
+        await callback(...args).then(response => response.forEach(record => {
+            record.position = (record.position === undefined) ? 'xxxxx' : record.position;
+            records[record.accountId] = {
+                position: record.position,
+                time: convertMS(getTime(record)),
+            };
+        }));
+        return records;
+    }
+
+    getLeaderboard = async (custom_id, length = 25, onlyWorld = true, offset = 0)  => {
+        return await this.getMapRecords(this.liveService.getMapLeaderboard, [custom_id, length, onlyWorld, offset], (record => record.score));
+    }
+
+    getWatchedAccountsMapRecords = async (accountIdList, mapId, gameMode = 'Race', seasonId = undefined) => {
+        return await this.getMapRecords(this.coreService.getMapRecords, [accountIdList, mapId, gameMode, seasonId], (record => record.recordScore.time));
+    }
+    
+    generateLeaderboardField = (recordsJSON) => {
         const { name, records } = recordsJSON;
         let field = {
             name: name,
             value: `\`\`\`RANK | TIME      | PLAYER\n-----+-----------+-----------------`,
             inline: false,
         };
-        let accountIds = [];
+        const accountIds = Object.keys(records);
         let players = [];
-        if (records.length > 0) {
-            records.forEach(record => accountIds.push(record.accountId));
-            const accounts = await this.oauthService.fetchAccountNames(accountIds);
-            records.forEach(record => {
-                field.value += `\n${record.position.toString().padStart(5)}: ${record.time} - ${accounts[record.accountId]}`;
+        if (accountIds.length > 0) {
+            accountIds.forEach(accountId => {
+                field.value += `\n${records[accountId].position.toString().padStart(5)}: ${records[accountId].time} - ${records[accountId].name}`;
                 players.push({
-                    label: `${accounts[record.accountId]}`,
-                    value: `${record.accountId}`,
+                    label: `${records[accountId].name}`,
+                    value: `${accountId}`,
                 });
             });
             field.value += '```';
@@ -573,20 +595,7 @@ export class TrackmaniaFacade {
         return res;
     }
 
-    getLeaderboard = async (custom_id, length = 25, onlyWorld = true, offset = 0)  => {
-        let lb_info = [];
-        await this.liveService.getMapLeaderboard(custom_id, length, onlyWorld, offset)
-        .then(response => response.forEach(record => {
-            lb_info.push({
-                position: record.position,
-                accountId: record.accountId,
-                time: convertMS(record.score),
-            });
-        }));
-        return lb_info;
-    }
-
-    updateLeaderboard = async (leaderboard, mapUid, groupUid, endTimestamp, length = 25, onlyWorld = true, offset = 0) => {
+    updateLeaderboard = (leaderboard, mapUid, groupUid, endTimestamp, length = 25, onlyWorld = true, offset = 0) => {
         const { encodedGroupUid, encodedTimestamp } = toBase64(groupUid, endTimestamp);
 
         let pages = [];
@@ -598,12 +607,14 @@ export class TrackmaniaFacade {
             });
         }
 
+        const leaderboardKeys = Object.keys(leaderboard);
+
         const recordsJSON = {
-            name: `${pages[0].label} : ${leaderboard[0].position} - ${leaderboard[leaderboard.length-1].position}`,
+            name: `${pages[0].label} : ${leaderboard[leaderboardKeys[0]].position} - ${leaderboard[leaderboardKeys[length-1]].position}`,
             records: leaderboard,
         };
 
-        const records = await this.generateLeaderboardField(recordsJSON);
+        const records = this.generateLeaderboardField(recordsJSON);
 
         let buttons = [{
             type: MessageComponentTypes.BUTTON,
@@ -682,9 +693,9 @@ export class TrackmaniaFacade {
      * @param {JSON} [watchedAccounts={}]
      * @returns {Promise<JSON>}
      */
-    getLeaderboardInfo = async (track_info, length = 25, onlyWorld = true, offset = 0) => {
+    getLeaderboardInfo = (track_info, length = 25, onlyWorld = true, offset = 0) => {
         const { leaderboard, groupUid, mapUid, endTimestamp, author } = track_info;
-        const { records, buttons, pageSelecter, encodedGroupUid, encodedTimestamp } = await this.updateLeaderboard(leaderboard, mapUid, groupUid, endTimestamp, Number(length), onlyWorld, Number(offset));
+        const { records, buttons, pageSelecter, encodedGroupUid, encodedTimestamp } = this.updateLeaderboard(leaderboard, mapUid, groupUid, endTimestamp, Number(length), onlyWorld, Number(offset));
 
         const fields = [records.field];
 
@@ -703,19 +714,6 @@ export class TrackmaniaFacade {
         return leaderboard_info;
     }
 
-    getWatchedAccounts = async (accountIdList, mapId, gameMode = 'Race', seasonId = undefined) => {
-        let records = [];
-        await this.coreService.getMapRecords(accountIdList, mapId, gameMode, seasonId)
-        .then(response => response.forEach(record => {
-            records.push({
-                position: 'xxxxx',
-                accountId: record.accountId,
-                time: convertMS(record.recordScore.time),
-            })
-        }));
-
-        return records;
-    }
 }
 
 
