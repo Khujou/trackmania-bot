@@ -26,6 +26,7 @@ const accountWatchers = {
     '205541764206034944': ['c3ed703f-8a07-49c7-a3b3-06713f548142'],
     '500722458056327196': ['c3ed703f-8a07-49c7-a3b3-06713f548142'],
 };
+const TOTD_TIME = new Date(Date.UTC(0, 0, 0, 18));
 
 const client = new MongoClient(uri, {
     serverApi: {
@@ -66,7 +67,7 @@ log.info(JSON.stringify(debugData));
 const startDate = new Date(2020, 6, 1);
 let totd_channel = '1183478764856942642';
 
-const daily_totd = schedule.scheduleJob('0 13 * * *', async() => {
+const daily_totd = schedule.scheduleJob(`0 ${TOTD_TIME.getHours()} * * *`, async() => {
     let track_json;
     track_json = await cachingTOTDProvider.getData().catch(err => embeddedErrorMessage(endpoint, err));
     await trackmaniaFacade.getLeaderboard(`Personal_Best/map/${track_json.mapUid}`, 1).then(res => {
