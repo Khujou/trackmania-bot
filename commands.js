@@ -62,4 +62,6 @@ const ALL_COMMANDS = [
     TUCKER
 ];
 
+const GUILD_COMMANDS = [];
+
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);

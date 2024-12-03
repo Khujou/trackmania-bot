@@ -1,5 +1,12 @@
 import 'dotenv/config';
+import { InteractionResponseFlags,
+    MessageComponentTypes,
+    ButtonStyleTypes
+ } from 'discord-interactions';
 import fetch from 'node-fetch';
+import { getLogger } from './log.js';
+
+const log = getLogger();
 
 export async function DiscordRequest(endpoint, options) {
     const url = 'https://discord.com/api/v10/' + endpoint;
@@ -16,7 +23,7 @@ export async function DiscordRequest(endpoint, options) {
 
     if (!res.ok) {
         const data = await res.json();
-        console.log(res.status);
+        log.error(`Unable to send discord request: Error ${res.status}`);
         throw new Error(JSON.stringify(data));
     }
 
@@ -99,6 +106,23 @@ export function convertNumberToBase(str, fromBase, toBase, targetLen = 0) {
 
     res = res.padStart(targetLen, '0');
     return res;
+}
+
+const UID_LENGTH = 32;
+const UID_DASH_INDICES = [0, 8, 12, 16, 20, 32];
+
+/**
+ * UID in this instance being any string that was formatted as ( xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx )
+ * before it was converted to Base-64
+ * @param {string} UID 
+ * @returns 
+ */
+export function revertUID(UID) {
+    UID = convertNumberToBase(UID, 64, 16, UID_LENGTH);
+    let arr = [];
+    for (let i = 1; i < UID_DASH_INDICES.length; i++)
+        arr.push(UID.slice(UID_DASH_INDICES[i-1], UID_DASH_INDICES[i]));
+    return arr.join('-');
 }
 
 /**
