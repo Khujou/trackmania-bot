@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { InstallGlobalCommands } from './utils.js';
+import { InstallGlobalCommands } from '../utils.js';
 
 const TEST_COMMAND = {
     name: 'test',
@@ -61,5 +61,7 @@ const ALL_COMMANDS = [
     TRACK_OF_THE_DAY_COMMAND,
     TUCKER
 ];
+
+const GUILD_COMMANDS = [];
 
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
