@@ -6,10 +6,10 @@ import {
     MessageComponentTypes,
     ButtonStyleTypes,
 } from 'discord-interactions';
-import { getLogger, logProfile } from './log.js';
-import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase, revertUID, getDate } from './utils.js';
-import { TrackmaniaWrapper, FileBasedCachingAccessTokenProvider, FileBasedCachingJSONDataProvider } from './trackmaniaWrapper.js';
-import { TrackmaniaView } from './trackmaniaView.js';
+import { getLogger, logProfile } from '../log.js';
+import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase, revertUID, getDate } from '../utils.js';
+import { TrackmaniaWrapper, FileBasedCachingAccessTokenProvider, FileBasedCachingJSONDataProvider } from '../trackmania/trackmaniaWrapper.js';
+import { TrackmaniaView } from '../trackmania/trackmaniaView.js';
 
 const log = getLogger();
 
@@ -32,8 +32,8 @@ export class TestingClass {
                     width: 100,
                 },
                 fields: [{
-                    name: 'field name',
-                    value: 'field value\nfield value',
+                    name: 'Time Called',
+                    value: `<t:${Math.floor(Date.now()/1000)}:R>`,
                 },],
                 author: {
                     name: 'Brungus',
@@ -55,7 +55,7 @@ export class TestingClass {
                     type: MessageComponentTypes.BUTTON,
                     style: 1,
                     label: 'test',
-                    custom_id: 'test_button',
+                    custom_id: 'test',
                 },{
                     type: MessageComponentTypes.BUTTON,
                     url: 'https://raw.githubusercontent.com/2qar/bigheadgeorge.github.io/master/ogdog.gif',
@@ -299,8 +299,8 @@ class AccountsFunctions extends Function {
 
 export class TrackmaniaBotFunctions {
     constructor() {
-        this.Track = new TrackFunctions();
-        this.Leaderboard = new LeaderboardFunctions();
-        this.Accounts = new AccountsFunctions();
+        this.track = new TrackFunctions();
+        this.leaderboard = new LeaderboardFunctions();
+        this.accounts = new AccountsFunctions();
     }
 }

@@ -2,8 +2,8 @@ import 'dotenv/config';
 import { MessageComponentTypes, ButtonStyleTypes } from 'discord-interactions';
 import fetch from 'node-fetch';
 import * as fs from 'node:fs';
-import { getLogger, logProfile } from './log.js';
-import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase, getDate } from './utils.js';
+import { getLogger, logProfile } from '../log.js';
+import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase, getDate } from '../utils.js';
 
 const log = getLogger();
 

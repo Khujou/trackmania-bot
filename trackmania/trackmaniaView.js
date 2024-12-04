@@ -1,6 +1,6 @@
 import { MessageComponentTypes, ButtonStyleTypes } from 'discord-interactions';
-import { getLogger, logProfile } from './log.js';
-import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase, getDate } from './utils.js';
+import { getLogger, logProfile } from '../log.js';
+import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase, getDate } from '../utils.js';
 
 const log = getLogger();
 
@@ -173,10 +173,10 @@ export class TrackmaniaView {
         const { command, title, author, authortime, goldtime, silverTime, bronzeTime, tags, website, stylename, thumbnail, mapUid, groupUid, provision, mapType, endTimestamp } = track_json;
 
         const medal_times = [
-            `:green_circle: ${authortime}`,
-            `:yellow_circle: ${goldtime}`,
-            `:white_circle: ${silverTime}`,
-            `:brown_circle: ${bronzeTime}`
+            `<:author:1313817834391998534> ${authortime}`,
+            `<:gold:1313817803534635050> ${goldtime}`,
+            `<:silver:1313819850094678056> ${silverTime}`,
+            `<:bronze:1313819823452721202> ${bronzeTime}`
         ].join('\n');
 
         const { encodedGroupUid, encodedTimestamp } = toBase64(groupUid, endTimestamp);
