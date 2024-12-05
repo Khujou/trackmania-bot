@@ -173,10 +173,10 @@ export class TrackmaniaView {
         const { command, title, author, authortime, goldtime, silverTime, bronzeTime, tags, website, stylename, thumbnail, mapUid, groupUid, provision, mapType, endTimestamp } = track_json;
 
         const medal_times = [
-            `<:author:1313817834391998534> ${authortime}`,
-            `<:gold:1313817803534635050> ${goldtime}`,
-            `<:silver:1313819850094678056> ${silverTime}`,
-            `<:bronze:1313819823452721202> ${bronzeTime}`
+            `<:author:1313817834391998534> ${convertMS(authortime)}`,
+            `<:gold:1313817803534635050> ${convertMS(goldtime)}`,
+            `<:silver:1313819850094678056> ${convertMS(silverTime)}`,
+            `<:bronze:1313819823452721202> ${convertMS(bronzeTime)}`
         ].join('\n');
 
         const { encodedGroupUid, encodedTimestamp } = toBase64(groupUid, endTimestamp);
@@ -186,12 +186,9 @@ export class TrackmaniaView {
             embeds: [{
                 author: { name: `${command}`, },
                 title: title,
+                description: `Made by ${author} (${author} on TMX)`,
                 color: stylename,
                 fields: [{
-                    name: 'Author',
-                    value: author,
-                    inline: true,
-                },{
                     name: 'Medal Times',
                     value: medal_times,
                     inline: true,

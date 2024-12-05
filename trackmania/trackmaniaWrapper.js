@@ -432,14 +432,16 @@ export class TrackmaniaWrapper {
          */
         const currDate = getDate();
         const offset = ((currDate.getUTCFullYear() - inputDate.getUTCFullYear()) * 12) + ((currDate.getUTCMonth()) - inputDate.getUTCMonth());
-        console.log(offset);
         const totd = await this.liveService.trackOfTheDay(offset, inputDate.getUTCDate());
         const command = `Track of the Day - ${DAYS[totd.day]} ${MONTHS[inputDate.getUTCMonth()]} ${totd.monthDay}, ${inputDate.getUTCFullYear()}`;
+
+        console.log(totd);
 
         return {
             command: command,
             mapUid: totd.mapUid,
             groupUid: totd.seasonUid,
+            startTimestamp: totd.startTimestamp,
             endTimestamp: totd.endTimestamp,
         };
     }
@@ -466,10 +468,11 @@ export class TrackmaniaWrapper {
             command: command,
             title: nadeo_map_info.filename.slice(0,-8),
             author: null,
-            authortime: convertMS(nadeo_map_info.authorScore),
-            goldtime: convertMS(nadeo_map_info.goldScore),
-            silverTime: convertMS(nadeo_map_info.silverScore),
-            bronzeTime: convertMS(nadeo_map_info.bronzeScore),
+            authorUid: nadeo_map_info.author,
+            authortime: nadeo_map_info.authorScore,
+            goldtime: nadeo_map_info.goldScore,
+            silverTime: nadeo_map_info.silverScore,
+            bronzeTime: nadeo_map_info.bronzeScore,
             tags: 'not available',
             website: null,
             stylename: 0,
@@ -500,9 +503,10 @@ export class TrackmaniaWrapper {
             .then(response => response[nadeo_map_info.author])
             .catch(err => {
                 log.error('Can\'t get author WTF', err);
-                track_json.author = nadeo_map_info.author;
             });
         };
+
+        console.log(track_json);
 
         return track_json;
     }

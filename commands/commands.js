@@ -1,5 +1,7 @@
 import 'dotenv/config';
-import { InstallGlobalCommands } from '../utils.js';
+import { InstallGlobalCommands, InstallGuildCommands } from '../utils.js';
+
+console.log('Running npm run register');
 
 const TEST_COMMAND = {
     name: 'test',
@@ -12,6 +14,33 @@ const SETTINGS = {
     description: 'settings command',
     type: 1,
 };
+
+const SEARCH = {
+    name: 'search',
+    description: 'search command',
+    type: 1,
+    options: [{
+        name: 'account',
+        description: 'Get information for a Trackmania Account using their accountId',
+        type: 1,
+        options: [{
+            name: 'accountId',
+            description: 'accountId',
+            type: 4,
+            required: true,
+        }],
+    },{
+        name: 'map',
+        description: 'Get information for a Map using its mapId',
+        type: 1,
+        options: [{
+            name: 'mapId',
+            description: 'mapId',
+            type: 4,
+            required: true,
+        }],
+    }],
+}
 
 const TRACK_OF_THE_DAY_COMMAND = {
     name: 'totd',
@@ -55,13 +84,16 @@ const TUCKER = {
     type: 1,
 }
 
-const ALL_COMMANDS = [
-    TEST_COMMAND,
+const GLOBAL_COMMANDS = [
     SETTINGS,
-    TRACK_OF_THE_DAY_COMMAND,
+    SEARCH,
+    TRACK_OF_THE_DAY_COMMAND
+];
+
+const GUILD_COMMANDS = [
+    TEST_COMMAND,
     TUCKER
 ];
 
-const GUILD_COMMANDS = [];
-
-InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
+InstallGlobalCommands(process.env.APP_ID, GLOBAL_COMMANDS);
+InstallGuildCommands(process.env.APP_ID, process.env.TEST_SERVER_ID, GUILD_COMMANDS);

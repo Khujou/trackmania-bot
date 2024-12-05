@@ -33,21 +33,15 @@ export async function DiscordRequest(endpoint, options) {
 export async function InstallGlobalCommands(appId, commands) {
     const endpoint = `applications/${appId}/commands`;
 
-    try {
-        await DiscordRequest(endpoint, { method: 'PUT', body: commands });
-    } catch (err) {
-        console.error(err);
-    }
+    await DiscordRequest(endpoint, { method: 'PUT', body: commands })
+    .catch(err => log.error(err));
 }
 
 export async function InstallGuildCommands(appId, guild_id, commands) {
     const endpoint = `applications/${appId}/guilds/${guild_id}/commands`;
 
-    try {
-        await DiscordRequest(endpoint, {method: 'PUT', body: commands});
-    } catch (err) {
-        console.error(err);
-    }
+    await DiscordRequest(endpoint, { method: 'PUT', body: commands })
+    .catch(err => log.error(err));
 }
 
 export function convertMillisecondsToFormattedTime(milliseconds) {
@@ -126,12 +120,10 @@ export function revertUID(UID) {
 }
 
 /**
- * Gets the date, with the time pushed back 13 hours :)
- * @param {*} yearsAgo 
- * @param {*} monthsAgo 
+ * whatever :|
  */
 export function getDate() {
-    let date = new Date();
-    date.setUTCHours(-18);
-    return date;
+    let date = Date.now();
+    date -= 64800000;
+    return new Date(date);
 }

@@ -7,7 +7,7 @@ import {
     ButtonStyleTypes,
 } from 'discord-interactions';
 import { getLogger, logProfile } from '../log.js';
-import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase, revertUID, getDate } from '../utils.js';
+import { convertNumberToBase, revertUID, getDate } from '../utils.js';
 import { TrackmaniaWrapper, FileBasedCachingAccessTokenProvider, FileBasedCachingJSONDataProvider } from '../trackmania/trackmaniaWrapper.js';
 import { TrackmaniaView } from '../trackmania/trackmaniaView.js';
 
@@ -34,7 +34,12 @@ export class TestingClass {
                 fields: [{
                     name: 'Time Called',
                     value: `<t:${Math.floor(Date.now()/1000)}:R>`,
-                },],
+                    inline: true,
+                },{
+                    name: 'bruh',
+                    value: '<:champion:1313817856831651840>',
+                    inline: true,
+                }],
                 author: {
                     name: 'Brungus',
                     url: 'https://github.com/Khujou/trackmania-bot',
@@ -89,6 +94,19 @@ class Function {
 
 }
 
+async function getTOTD(dateArg = new Date()) {
+    const { command, mapUid, groupUid, startTimestamp, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay(dateArg)
+    .catch(err => console.error(err));
+
+    track_json = await this.trackmaniaWrapper.getTrackInfo(command, mapUid, groupUid)
+    .catch(err => console.error(err));
+
+    track_json.startTimestamp = startTimestamp;
+    track_json.endTimestamp = endTimestamp;
+
+    return track_json;
+}
+
 class TrackFunctions extends Function {
     constructor() {
         super();
@@ -96,13 +114,15 @@ class TrackFunctions extends Function {
         // Returns up-to-date TOTD info. Checks if stored TOTD info is out of date and replaces with up-to-date info.
         this.cachingTOTDProvider = new FileBasedCachingJSONDataProvider('totd.json',
             undefined,
-            (trackInfo) => trackInfo.endTimestamp < (Math.floor(Date.now() / 1000)),
+            (trackInfo) => trackInfo.endTimestamp <= (Math.floor(Date.now() / 1000)),
             async () => { 
-                const { command, mapUid, groupUid, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay();
+                const { command, mapUid, groupUid, startTimestamp, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay();
                 let track_json = await this.trackmaniaWrapper.getTrackInfo(command, mapUid, groupUid);
+                track_json.startTimestamp = startTimestamp;
                 track_json.endTimestamp = endTimestamp;
                 return track_json;
             });
+            
     }
     
     START_DATE = new Date(2020, 6, 1);
@@ -111,33 +131,36 @@ class TrackFunctions extends Function {
         let callback = d => d;
         let callbackArgs = [];
         let track_json = {};
-            let dateArg = getDate();
-            if (options[0].name === 'past') {
-                const fields = options[0].options;
-                const inputDate = new Date(fields[0].value, fields[1].value - 1, fields[2].value);
-                dateArg = (inputDate < dateArg) ? inputDate : dateArg;
-                if (inputDate < this.START_DATE)
-                    throw new Error('Date given is before Trackmania came out, silly :)');
+        let dateArg = getDate();
+        if (options[0].name === 'past') {
+            const fields = options[0].options;
+            const inputDate = new Date(fields[0].value, fields[1].value - 1, fields[2].value);
+            dateArg = (inputDate < dateArg) ? inputDate : dateArg;
+            if (inputDate < this.START_DATE)
+                throw new Error('Date given is before Trackmania came out, silly :)');
 
-                callback = async (dateArg) => {
-                    const { command, mapUid, groupUid, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay(dateArg)
-                    .catch(err => console.error(err));
+            console.log(dateArg + inputDate);
 
-                    track_json = await this.trackmaniaWrapper.getTrackInfo(command, mapUid, groupUid)
-                    .catch(err => console.error(err));
+            callback = async (dateArg) => {
+                const { command, mapUid, groupUid, startTimestamp, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay(dateArg)
+                .catch(err => console.error(err));
 
-                    track_json.endTimestamp = endTimestamp;
+                track_json = await this.trackmaniaWrapper.getTrackInfo(command, mapUid, groupUid)
+                .catch(err => console.error(err));
 
-                    return track_json;
-                }
-                callbackArgs = [dateArg];
+                track_json.startTimestamp = startTimestamp;
+                track_json.endTimestamp = endTimestamp;
 
-            } else {
-                callback = this.cachingTOTDProvider.getData;
+                return track_json;
             }
+            callbackArgs = [dateArg];
 
-            let embeddedTOTD = this.getAndEmbedTrackInfo(callback, callbackArgs);
-            return embeddedTOTD;
+        } else {
+            callback = this.cachingTOTDProvider.getData;
+        }
+
+        let embeddedTOTD = this.getAndEmbedTrackInfo(callback, callbackArgs);
+        return embeddedTOTD;
     }
     
     buttonGetTrackInfo = async (params, command_queries) => {
