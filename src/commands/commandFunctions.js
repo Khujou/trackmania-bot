@@ -92,20 +92,21 @@ class Function {
         this.trackmaniaView = new TrackmaniaView();
     }
 
+    getTOTD = async (dateArg = new Date()) => {
+        const { command, mapUid, groupUid, startTimestamp, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay(dateArg)
+        .catch(err => console.error(err));
+
+        let track_json = await this.trackmaniaWrapper.getTrackInfo(command, mapUid, groupUid)
+        .catch(err => console.error(err));
+
+        track_json.startTimestamp = startTimestamp;
+        track_json.endTimestamp = endTimestamp;
+
+        return track_json;
+    }
 }
 
-async function getTOTD(dateArg = new Date()) {
-    const { command, mapUid, groupUid, startTimestamp, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay(dateArg)
-    .catch(err => console.error(err));
 
-    track_json = await this.trackmaniaWrapper.getTrackInfo(command, mapUid, groupUid)
-    .catch(err => console.error(err));
-
-    track_json.startTimestamp = startTimestamp;
-    track_json.endTimestamp = endTimestamp;
-
-    return track_json;
-}
 
 class TrackFunctions extends Function {
     constructor() {
@@ -115,13 +116,8 @@ class TrackFunctions extends Function {
         this.cachingTOTDProvider = new FileBasedCachingJSONDataProvider('totd.json',
             undefined,
             (trackInfo) => trackInfo.endTimestamp <= (Math.floor(Date.now() / 1000)),
-            async () => { 
-                const { command, mapUid, groupUid, startTimestamp, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay();
-                let track_json = await this.trackmaniaWrapper.getTrackInfo(command, mapUid, groupUid);
-                track_json.startTimestamp = startTimestamp;
-                track_json.endTimestamp = endTimestamp;
-                return track_json;
-            });
+            async() => await this.getTOTD()
+        );
             
     }
     
@@ -130,7 +126,6 @@ class TrackFunctions extends Function {
     commandTOTD = async (options) => {
         let callback = d => d;
         let callbackArgs = [];
-        let track_json = {};
         let dateArg = getDate();
         if (options[0].name === 'past') {
             const fields = options[0].options;
@@ -141,18 +136,7 @@ class TrackFunctions extends Function {
 
             console.log(dateArg + inputDate);
 
-            callback = async (dateArg) => {
-                const { command, mapUid, groupUid, startTimestamp, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay(dateArg)
-                .catch(err => console.error(err));
-
-                track_json = await this.trackmaniaWrapper.getTrackInfo(command, mapUid, groupUid)
-                .catch(err => console.error(err));
-
-                track_json.startTimestamp = startTimestamp;
-                track_json.endTimestamp = endTimestamp;
-
-                return track_json;
-            }
+            callback = async (dateArg) => await this.getTOTD(dateArg);
             callbackArgs = [dateArg];
 
         } else {
@@ -171,7 +155,6 @@ class TrackFunctions extends Function {
         const endTimestamp = (isTOTD) ? Number(convertNumberToBase(command_queries[2], 64, 10)) : 0;
         let callback = d => d;
         let callbackArgs = [];
-        let track_json;
         if (isTOTD && endTimestamp > Math.floor(Date.now() / 1000)) {
             callback = this.cachingTOTDProvider.getData;
         }

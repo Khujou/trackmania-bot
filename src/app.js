@@ -12,7 +12,6 @@ import * as schedule from 'node-schedule';
 import { TestingClass, TrackmaniaBotFunctions } from './commands/commandFunctions.js';
 import { DiscordRequest } from './utils.js';
 import { TrackmaniaDatabase, UsersDatabase } from './cache/database.js';
-import sqlite3 from 'sqlite3';
 import { setLogLevel, getLogger, logProfile } from './log.js';
 
 setLogLevel('info');
@@ -24,19 +23,22 @@ const PORT = process.env.PORT || 3000;
 
 const testing = new TestingClass();
 const trackmaniaBot = new TrackmaniaBotFunctions();
-const usersDB = new UsersDatabase('cache/dbs/discordUsers.db');
-const trackmaniaDB = new TrackmaniaDatabase('cache/dbs/trackmania.db');
+const usersDB = new UsersDatabase('src/cache/dbs/discordUsers.db');
+const trackmaniaDB = new TrackmaniaDatabase('src/cache/dbs/trackmania.db');
 
-usersDB.createTable('users', {
+console.log(usersDB.databaseFilepath);
+
+await usersDB.createTable('users', {
     discordUserId: 'INTEGER PRIMARY KEY NOT NULL',
 });
 
-trackmaniaDB.createTable('accounts', {
+await trackmaniaDB.createTable('accounts', {
     accountUid: 'TEXT PRIMARY KEY NOT NULL',
     accountName: 'TEXT NOT NULL',
+    accountNameTMX: 'TEXT',
 });
 
-trackmaniaDB.createTable('tracks', {
+await trackmaniaDB.createTable('tracks', {
     mapUid: 'TEXT PRIMARY KEY NOT NULL',
     mapId: 'TEXT NOT NULL',
     mapName: 'TEXT NOT NULL',
@@ -57,7 +59,7 @@ trackmaniaDB.createTable('tracks', {
     accountUid: ['accounts', 'accountUid'],
 });
 
-trackmaniaDB.createTable('totd', {
+await trackmaniaDB.createTable('totd', {
     mapUid: 'TEXT PRIMARY KEY NOT NULL',
     groupUid: 'TEXT NOT NULL',
     startTimestamp: 'INTEGER NOT NULL',
@@ -83,7 +85,10 @@ await trackmaniaDB.insertTrack({
     mapType: 'Race',
     startTimestamp: 1733335200,
     endTimestamp: 1733421600,
-  });
+});
+
+console.log(await trackmaniaDB.getTrack('xNv75plrEXTqMQmsBbrsoVjnAA8')); //returns json
+console.log(await trackmaniaDB.getTrack('5L9z1oBNibL2F6rbozHI5wp_5el')); //returns undefined
 
 
 const accountWatchers = {
