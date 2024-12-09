@@ -3,7 +3,7 @@ import { MessageComponentTypes, ButtonStyleTypes } from 'discord-interactions';
 import fetch from 'node-fetch';
 import * as fs from 'node:fs';
 import { getLogger, logProfile } from '../log.js';
-import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase, getDate } from '../utils.js';
+import { convertMillisecondsToFormattedTime as convertMS, getDate } from '../utils.js';
 
 const log = getLogger();
 
@@ -433,12 +433,10 @@ export class TrackmaniaWrapper {
         const currDate = getDate();
         const offset = ((currDate.getUTCFullYear() - inputDate.getUTCFullYear()) * 12) + ((currDate.getUTCMonth()) - inputDate.getUTCMonth());
         const totd = await this.liveService.trackOfTheDay(offset, inputDate.getUTCDate());
-        const command = `Track of the Day - ${DAYS[totd.day]} ${MONTHS[inputDate.getUTCMonth()]} ${totd.monthDay}, ${inputDate.getUTCFullYear()}`;
 
         console.log(totd);
 
         return {
-            command: command,
             mapUid: totd.mapUid,
             groupUid: totd.seasonUid,
             startTimestamp: totd.startTimestamp,
@@ -453,7 +451,7 @@ export class TrackmaniaWrapper {
      * @param {string} [groupUid='Personal_Best']
      * @returns {Promise<{}>}
      */
-    getTrackInfo = async (command, mapUid, groupUid = 'Personal_Best') => {
+    getTrackInfo = async (mapUid, groupUid = null) => {
         const promises = await Promise.all([
             await this.coreService.getMapInfo(undefined, mapUid).then(response => response[0]),
             await this.exchangeService.getMapInfo(mapUid).catch(err => log.info(err)),
@@ -464,25 +462,28 @@ export class TrackmaniaWrapper {
 
         console.log(nadeo_map_info);
 
+        const accountName = await this.getAccountName([nadeo_map_info.author]);
+
         let track_json = {
-            command: command,
-            title: nadeo_map_info.filename.slice(0,-8),
-            author: null,
-            authorUid: nadeo_map_info.author,
-            authortime: nadeo_map_info.authorScore,
-            goldtime: nadeo_map_info.goldScore,
-            silverTime: nadeo_map_info.silverScore,
-            bronzeTime: nadeo_map_info.bronzeScore,
-            tags: 'not available',
-            website: null,
-            stylename: 0,
-            thumbnail: nadeo_map_info.thumbnailUrl,
-            groupUid: groupUid,
             mapUid: mapUid,
             mapId: nadeo_map_info.mapId,
-            provision: `Map UID: ${mapUid}\nProvided by Nadeo`,
+            mapName: nadeo_map_info.filename.slice(0,-8),
+            accountName: accountName[Object.keys(accountName)[0]],
+            accountUid: nadeo_map_info.author,
             mapType: nadeo_map_info.mapType.slice(14),
+            authorTime: nadeo_map_info.authorScore,
+            goldTime: nadeo_map_info.goldScore,
+            silverTime: nadeo_map_info.silverScore,
+            bronzeTime: nadeo_map_info.bronzeScore,
         }
+
+        if (groupUid != null) {
+            track_json.groupUid = groupUid;
+        }
+
+        console.log(track_json.bleh);
+
+        console.log(tmx_map_info);
 
         /**
          * Tries to find the track on trackmania.exchange. If it can, updates attributes of map
@@ -491,20 +492,13 @@ export class TrackmaniaWrapper {
          */
 
         if (tmx_map_info !== undefined) {
-            track_json.title = tmx_map_info.Name
-            track_json.author = tmx_map_info.Username;
+            track_json.mapName = tmx_map_info.Name
+            track_json.userID = tmx_map_info.UserID,
+            track_json.trackID = tmx_map_info.TrackID;
+            track_json.accountNameTMX = tmx_map_info.Username;
             track_json.tags = tmx_map_info.Tags.split(',').map(tag => MAP_TAGS[parseInt(tag) - 1]?.Name).join('\n');
-            track_json.website = `https://trackmania.exchange/s/tr/${tmx_map_info.TrackID}`;
-            track_json.stylename = parseInt(MAP_TAGS.find(tag => tag.Name === tmx_map_info.StyleName)?.Color, 16);
-            track_json.provision += ' and Trackmania.Exchange';
-        } else {
-            log.error('Couldn\'t retrieve data from trackmania.exchange');
-            track_json.author = await this.getAccountName([nadeo_map_info.author])
-            .then(response => response[nadeo_map_info.author])
-            .catch(err => {
-                log.error('Can\'t get author WTF', err);
-            });
-        };
+            track_json.style = parseInt(MAP_TAGS.find(tag => tag.Name === tmx_map_info.StyleName)?.Color, 16);
+        }
 
         console.log(track_json);
 

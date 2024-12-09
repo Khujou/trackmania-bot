@@ -11,7 +11,7 @@ import {
 import * as schedule from 'node-schedule';
 import { TestingClass, TrackmaniaBotFunctions } from './commands/commandFunctions.js';
 import { DiscordRequest } from './utils.js';
-import { TrackmaniaDatabase, UsersDatabase } from './cache/database.js';
+import { getDatabaseFacade } from './cache/database.js';
 import { setLogLevel, getLogger, logProfile } from './log.js';
 
 setLogLevel('info');
@@ -23,72 +23,15 @@ const PORT = process.env.PORT || 3000;
 
 const testing = new TestingClass();
 const trackmaniaBot = new TrackmaniaBotFunctions();
-const usersDB = new UsersDatabase('src/cache/dbs/discordUsers.db');
-const trackmaniaDB = new TrackmaniaDatabase('src/cache/dbs/trackmania.db');
+const databaseFacade = await getDatabaseFacade();
 
-console.log(usersDB.databaseFilepath);
+log.info('hi hi hi ');
 
-await usersDB.createTable('users', {
-    discordUserId: 'INTEGER PRIMARY KEY NOT NULL',
-});
+console.log(await databaseFacade.trackmaniaDB.getTrack('xNv75plrEXTqMQmsBbrsoVjnAA8')); //returns json
+console.log(await databaseFacade.trackmaniaDB.getTrack('5L9z1oBNibL2F6rbozHI5wp_5el')); //returns undefined
 
-await trackmaniaDB.createTable('accounts', {
-    accountUid: 'TEXT PRIMARY KEY NOT NULL',
-    accountName: 'TEXT NOT NULL',
-    accountNameTMX: 'TEXT',
-});
-
-await trackmaniaDB.createTable('tracks', {
-    mapUid: 'TEXT PRIMARY KEY NOT NULL',
-    mapId: 'TEXT NOT NULL',
-    mapName: 'TEXT NOT NULL',
-    authorName:'TEXT NOT NULL',
-    accountUid: 'TEXT NOT NULL',
-    thumbnail: 'TEXT NOT NULL',
-    provision: 'TEXT NOT NULL',
-    mapType: 'TEXT NOT NULL',
-    authorTime: 'INTEGER NOT NULL',
-    goldTime: 'INTEGER NOT NULL',
-    silverTime: 'INTEGER NOT NULL',
-    bronzeTime: 'INTEGER NOT NULL',
-    tags: 'TEXT',
-    website: 'TEXT',
-    styleName: 'INTEGER',
-    refreshTime: 'INTEGER',
-}, {
-    accountUid: ['accounts', 'accountUid'],
-});
-
-await trackmaniaDB.createTable('totd', {
-    mapUid: 'TEXT PRIMARY KEY NOT NULL',
-    groupUid: 'TEXT NOT NULL',
-    startTimestamp: 'INTEGER NOT NULL',
-    endTimestamp: 'INTEGER NOT NULL',
-});
-
-await trackmaniaDB.insertTrack({
-    mapName: 'Formula E - São Paulo E-Prix',
-    authorName: 'florenzius_',
-    accountUid: '73eba009-a074-4439-916f-d25d7fa7bc1c',
-    authortime: 56264,
-    goldtime: 60000,
-    silverTime: 68000,
-    bronzeTime: 85000,
-    tags: 'not available',
-    website: null,
-    stylename: 0,
-    thumbnail: 'https://core.trackmania.nadeo.live/maps/3ccc7a5c-5040-452d-acff-45aa9cddd732/thumbnail.jpg',
-    groupUid: 'cc1004c0-3bcd-41f9-a1fd-e09f80df7e54',
-    mapUid: 'xNv75plrEXTqMQmsBbrsoVjnAA8',
-    mapId: '3ccc7a5c-5040-452d-acff-45aa9cddd732',
-    provision: 'Map UID: xNv75plrEXTqMQmsBbrsoVjnAA8\nProvided by Nadeo',
-    mapType: 'Race',
-    startTimestamp: 1733335200,
-    endTimestamp: 1733421600,
-});
-
-console.log(await trackmaniaDB.getTrack('xNv75plrEXTqMQmsBbrsoVjnAA8')); //returns json
-console.log(await trackmaniaDB.getTrack('5L9z1oBNibL2F6rbozHI5wp_5el')); //returns undefined
+console.log(await databaseFacade.trackmaniaDB.getTOTD(new Date(2024, 11, 4))); //return json
+console.log(await databaseFacade.trackmaniaDB.getTOTD(new Date(2024, 11, 5))); //return undefined
 
 
 const accountWatchers = {
@@ -152,6 +95,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
                 break;
             case 'totd':
+                switch(options.name) {
+                    case 'past':
+                        break;
+                    default:
+                        break;
+                }
                 res.send({
                     type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
                     data: {
@@ -165,6 +114,22 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 })
                 .catch(err => embeddedErrorMessage(RUD_endpoint, 'PATCH', err));
 
+                break;
+            case 'search':
+                res.send({
+                    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+                    data: {
+                        flags: InteractionResponseFlags.EPHEMERAL,
+                    }
+                });
+                switch(options.name) {
+                    case 'account':
+                        break;
+                    case 'map':
+                        break;
+                    default:
+
+                }
                 break;
             default:
                 res.send({

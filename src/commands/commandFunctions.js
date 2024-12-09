@@ -92,11 +92,11 @@ class Function {
         this.trackmaniaView = new TrackmaniaView();
     }
 
-    getTOTD = async (dateArg = new Date()) => {
-        const { command, mapUid, groupUid, startTimestamp, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay(dateArg)
+    fetchTOTD = async (dateArg = new Date()) => {
+        const { mapUid, groupUid, startTimestamp, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay(dateArg)
         .catch(err => console.error(err));
 
-        let track_json = await this.trackmaniaWrapper.getTrackInfo(command, mapUid, groupUid)
+        let track_json = await this.trackmaniaWrapper.getTrackInfo( mapUid, groupUid )
         .catch(err => console.error(err));
 
         track_json.startTimestamp = startTimestamp;
@@ -116,7 +116,7 @@ class TrackFunctions extends Function {
         this.cachingTOTDProvider = new FileBasedCachingJSONDataProvider('totd.json',
             undefined,
             (trackInfo) => trackInfo.endTimestamp <= (Math.floor(Date.now() / 1000)),
-            async() => await this.getTOTD()
+            async() => await this.fetchTOTD()
         );
             
     }
@@ -136,7 +136,7 @@ class TrackFunctions extends Function {
 
             console.log(dateArg + inputDate);
 
-            callback = async (dateArg) => await this.getTOTD(dateArg);
+            callback = async (dateArg) => await this.fetchTOTD(dateArg);
             callbackArgs = [dateArg];
 
         } else {

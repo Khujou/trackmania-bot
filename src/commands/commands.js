@@ -24,18 +24,18 @@ const SEARCH = {
         description: 'Get information for a Trackmania Account using their accountId',
         type: 1,
         options: [{
-            name: 'accountId',
-            description: 'accountId',
+            name: 'uid',
+            description: 'uid of the account',
             type: 4,
             required: true,
         }],
     },{
         name: 'map',
-        description: 'Get information for a Map using its mapId',
+        description: 'Get information for a Map using its mapUid',
         type: 1,
         options: [{
-            name: 'mapId',
-            description: 'mapId',
+            name: 'uid',
+            description: 'uid of the map',
             type: 4,
             required: true,
         }],

@@ -170,11 +170,13 @@ export class TrackmaniaView {
      * @returns
      */
     embedTrackInfo = (track_json) => {
-        const { command, title, author, authortime, goldtime, silverTime, bronzeTime, tags, website, stylename, thumbnail, mapUid, groupUid, provision, mapType, endTimestamp } = track_json;
+        const { mapUid, mapId, mapName, accountUid, accountName, mapType, 
+            authorTime, goldTime, silverTime, bronzeTime, userID, trackID, accountNameTMX, 
+            tags, style, groupUid, startTimestamp, endTimestamp } = track_json;
 
         const medal_times = [
-            `<:author:1313817834391998534> ${convertMS(authortime)}`,
-            `<:gold:1313817803534635050> ${convertMS(goldtime)}`,
+            `<:author:1313817834391998534> ${convertMS(authorTime)}`,
+            `<:gold:1313817803534635050> ${convertMS(goldTime)}`,
             `<:silver:1313819850094678056> ${convertMS(silverTime)}`,
             `<:bronze:1313819823452721202> ${convertMS(bronzeTime)}`
         ].join('\n');
@@ -184,27 +186,28 @@ export class TrackmaniaView {
 
         const res = {
             embeds: [{
-                author: { name: `${command}`, },
-                title: title,
-                description: `Made by ${author} (${author} on TMX)`,
-                color: stylename,
+                author: { name: (groupUid !== undefined) ? `Track of the Day - ${new Date(startTimestamp*1000).toLocaleDateString(undefined, {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                })}` : 'Map Search', },
+                title: mapName,
+                description: `Made by ${accountName} ${(accountNameTMX !== undefined) ? `(${accountNameTMX} on TMX)` : ''}`,
+                color: style,
                 fields: [{
                     name: 'Medal Times',
                     value: medal_times,
                     inline: true,
-                },{
-                    name: 'Map Tags',
-                    value: tags,
-                    inline: true,
-                },
-                ],
+                }],
                 image: {
-                    url: thumbnail,
+                    url: `https://core.trackmania.nadeo.live/maps/${mapId}/thumbnail.jpg`,
                     height: 100,
                     width: 100,
                 },
                 footer: {
-                    text: provision,
+                    text: `Map UID: ${mapUid}\n` + 
+                    `Provided by Nadeo ${(trackID !== undefined) ? 'and Trackmania.Exchange' : ''}`,
                 },
             },],
             components: [{
@@ -227,12 +230,20 @@ export class TrackmaniaView {
             },],
         };
 
-        if (track_json.website !== null) {
-            res['components'][0]['components'].push({
+        if (tags !== undefined) {
+            res.embeds[0].fields.push({
+                name: 'Map Tags',
+                value: tags,
+                inline: true,
+            });
+        }
+
+        if (trackID !== undefined) {
+            res.components[0].components.push({
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.LINK,
                 label: 'Trackmania.Exchange',
-                url: website,
+                url: `https://trackmania.exchange/s/tr/${trackID}`,
                 emoji: {
                     id: null,
                     name: '💻',
