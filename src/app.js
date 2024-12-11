@@ -9,9 +9,9 @@ import {
     verifyKeyMiddleware,
 } from 'discord-interactions';
 import * as schedule from 'node-schedule';
-import sqlite3 from 'sqlite3';
 import { TestingClass, TrackmaniaBotFunctions } from './commands/commandFunctions.js';
 import { DiscordRequest } from './utils.js';
+import { getDatabaseFacade } from './cache/database.js';
 import { setLogLevel, getLogger, logProfile } from './log.js';
 
 setLogLevel('info');
@@ -21,8 +21,9 @@ const log = getLogger();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const Testing = new TestingClass();
-const TrackmaniaBot = new TrackmaniaBotFunctions();
+const testing = new TestingClass();
+const trackmaniaBot = new TrackmaniaBotFunctions();
+const databaseFacade = await getDatabaseFacade();
 
 const accountWatchers = {
     '205541764206034944': ['c3ed703f-8a07-49c7-a3b3-06713f548142'],
@@ -30,27 +31,23 @@ const accountWatchers = {
 };
 const TOTD_TIME = new Date(Date.UTC(0, 0, 0, 18));
 
-const debugData = await logProfile(log, 'GetCachedTmData', () => TrackmaniaBot.track.cachingTOTDProvider.getData());
+const debugData = await logProfile(log, 'GetCachedTmData', async() => await trackmaniaBot.track.cachingTOTDProvider.getData());
 log.info(JSON.stringify(debugData));
 
-const totdChannels = ['1183478764856942642',
-    '1313152767820566598'];
+const totdChannels = [
+    //'1183478764856942642',
+    '1313152767820566598'
+];
 
 checkIfTOTDPostedToday(totdChannels[0]);
 
-const fetchTOTDDaily = schedule.scheduleJob(`0 ${TOTD_TIME.getHours()} * * *`, async() => {
-    do {
-
-    } while (false)
-});
-
 const sendTOTDDaily = schedule.scheduleJob(`1 ${TOTD_TIME.getHours()} * * *`, async() => {
-    const embeddedTotd = await TrackmaniaBot.track.getAndEmbedTrackInfo(TrackmaniaBot.track.cachingTOTDProvider.getData);
+    const embeddedTotd = await trackmaniaBot.track.getAndEmbedTrackInfo(databaseFacade.trackmaniaDB.getTOTD);
     for (const totdChannel of totdChannels) {
         await DiscordRequest(`channels/${totdChannel}/messages`, {
             method: 'POST',
             body: embeddedTotd,
-        }).catch(err => console.error(err));
+        }).catch(err => log.error(err));
     };
     
 });
@@ -79,14 +76,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             case 'test':
                 res.send({
                     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                    data: Testing.testEmbed(),
+                    data: testing.testEmbed(),
                 });
 
                 break;
             case 'tucker':
                 res.send({
                     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                    data: Testing.tuckerEmbed(),
+                    data: testing.tuckerEmbed(),
                 });
 
                 break;
@@ -100,7 +97,42 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
                 await DiscordRequest(RUD_endpoint, {
                     method: 'PATCH',
-                    body: await TrackmaniaBot.track.commandTOTD(options),
+                    body: await trackmaniaBot.track.commandTOTD(options),
+                })
+                .catch(err => embeddedErrorMessage(RUD_endpoint, 'PATCH', err));
+
+                break;
+            case 'search':
+                res.send({
+                    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+                    data: {
+                        flags: InteractionResponseFlags.EPHEMERAL,
+                    }
+                });
+
+                const commandSpec = options[0];
+                const fields = commandSpec.options;
+                let body;
+
+                switch(commandSpec.name) {
+                    case 'account':
+
+                        break;
+                    case 'map':
+                        body = await trackmaniaBot.track.commandSearchTrack(fields[0].value);
+
+                        break;
+                    case 'totd':
+                        body = await trackmaniaBot.track.commandSearchTOTD(new Date(fields[0].value, fields[1].value - 1, fields[2].value));
+
+                        break;
+                    default:
+                        embeddedErrorMessage(RUD_endpoint, 'PATCH', new Error('Not yet implemented'));
+                }
+
+                await DiscordRequest(RUD_endpoint, {
+                    method: 'PATCH',
+                    body: body
                 })
                 .catch(err => embeddedErrorMessage(RUD_endpoint, 'PATCH', err));
 
@@ -164,7 +196,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         
                 await DiscordRequest(endpoints[method], {
                     method: methods[method],
-                    body: await TrackmaniaBot.leaderboard.buttonGetLeaderboard(data, message, member, params, command_queries, embedChangeState, accountWatchers),
+                    body: await trackmaniaBot.leaderboard.buttonGetLeaderboard(data, message, member, params, command_queries, embedChangeState, accountWatchers),
                 })
                 .catch(err => {
                     log.error(err);
@@ -180,7 +212,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
     
                 await DiscordRequest(C_endpoint, {
                     method: 'POST',
-                    body: await TrackmaniaBot.track.buttonGetTrackInfo(params, command_queries),
+                    body: await trackmaniaBot.track.buttonGetTrackInfo(params, command_queries),
                 })
                 .catch(err => embeddedErrorMessage(C_endpoint, 'POST', err));
                 

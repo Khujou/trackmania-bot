@@ -7,11 +7,13 @@ import {
     ButtonStyleTypes,
 } from 'discord-interactions';
 import { getLogger, logProfile } from '../log.js';
-import { convertMillisecondsToFormattedTime as convertMS, convertNumberToBase, revertUID, getDate } from '../utils.js';
+import { convertNumberToBase, revertUID, getDate } from '../utils.js';
 import { TrackmaniaWrapper, FileBasedCachingAccessTokenProvider, FileBasedCachingJSONDataProvider } from '../trackmania/trackmaniaWrapper.js';
 import { TrackmaniaView } from '../trackmania/trackmaniaView.js';
+import { getDatabaseFacade } from '../cache/database.js';
 
 const log = getLogger();
+const databaseFacade = await getDatabaseFacade();
 
 export class TestingClass {
     constructor() {
@@ -26,6 +28,11 @@ export class TestingClass {
                 title: 'hello world',
                 color: 39423,
                 description: 'example embed',
+                thumbnail: {
+                    url: 'https://assets.tiltify.com/uploads/media_type/image/203025/blob-09636982-a21a-494b-bbe4-3692c2720ae3.jpeg',
+                    height: 5,
+                    width: 5,
+                },
                 image: {
                     url: 'https://images.unsplash.com/photo-1574144611937-0df059b5ef3e?q=80&w=1364&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
                     height: 100,
@@ -34,7 +41,12 @@ export class TestingClass {
                 fields: [{
                     name: 'Time Called',
                     value: `<t:${Math.floor(Date.now()/1000)}:R>`,
-                },],
+                    inline: true,
+                },{
+                    name: 'bruh',
+                    value: '<:champion:1313817856831651840>',
+                    inline: true,
+                }],
                 author: {
                     name: 'Brungus',
                     url: 'https://github.com/Khujou/trackmania-bot',
@@ -87,7 +99,21 @@ class Function {
         this.trackmaniaView = new TrackmaniaView();
     }
 
+    fetchTOTD = async (dateArg = new Date()) => {
+        const { mapUid, groupUid, startTimestamp, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay(dateArg)
+        .catch(err => log.error(err));
+
+        let trackJSON = await this.trackmaniaWrapper.getTrackInfo( mapUid, groupUid )
+        .catch(err => log.error(err));
+
+        trackJSON.startTimestamp = startTimestamp;
+        trackJSON.endTimestamp = endTimestamp;
+
+        return trackJSON;
+    }
 }
+
+
 
 class TrackFunctions extends Function {
     constructor() {
@@ -96,67 +122,41 @@ class TrackFunctions extends Function {
         // Returns up-to-date TOTD info. Checks if stored TOTD info is out of date and replaces with up-to-date info.
         this.cachingTOTDProvider = new FileBasedCachingJSONDataProvider('totd.json',
             undefined,
-            (trackInfo) => trackInfo.endTimestamp < (Math.floor(Date.now() / 1000)),
-            async () => { 
-                const { command, mapUid, groupUid, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay();
-                let track_json = await this.trackmaniaWrapper.getTrackInfo(command, mapUid, groupUid);
-                track_json.endTimestamp = endTimestamp;
-                return track_json;
-            });
+            (trackInfo) => trackInfo.endTimestamp <= (Math.floor(Date.now() / 1000)),
+            async() => await this.fetchTOTD()
+        );
+            
     }
     
     START_DATE = new Date(2020, 6, 1);
 
-    commandTOTD = async (options) => {
-        let callback = d => d;
-        let callbackArgs = [];
-        let track_json = {};
-            let dateArg = getDate();
-            if (options[0].name === 'past') {
-                const fields = options[0].options;
-                const inputDate = new Date(fields[0].value, fields[1].value - 1, fields[2].value);
-                dateArg = (inputDate < dateArg) ? inputDate : dateArg;
-                if (inputDate < this.START_DATE)
-                    throw new Error('Date given is before Trackmania came out, silly :)');
+    commandTOTD = async () => {
+        return await this.getAndEmbedTrackInfo(databaseFacade.trackmaniaDB.getTOTD);
+    }
 
-                callback = async (dateArg) => {
-                    const { command, mapUid, groupUid, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay(dateArg)
-                    .catch(err => console.error(err));
+    commandSearchTOTD = async (date) => {
+        date.setUTCHours(18);
+        const today = new Date().setUTCHours(18);
+        date = (date > today) ? today : date;
+        if (date < this.START_DATE) {
+            throw new Error('Date given is before Trackmania came out, silly :)');
+        }
+        const trackJSON = await databaseFacade.trackmaniaDB.getTOTD(date);
+        return this.trackmaniaView.embedTrackInfo(trackJSON);
+    }
 
-                    track_json = await this.trackmaniaWrapper.getTrackInfo(command, mapUid, groupUid)
-                    .catch(err => console.error(err));
-
-                    track_json.endTimestamp = endTimestamp;
-
-                    return track_json;
-                }
-                callbackArgs = [dateArg];
-
-            } else {
-                callback = this.cachingTOTDProvider.getData;
-            }
-
-            let embeddedTOTD = this.getAndEmbedTrackInfo(callback, callbackArgs);
-            return embeddedTOTD;
+    commandSearchTrack = async (mapUid = undefined) => {
+        if (mapUid === undefined) {
+            throw new Error('MapUid not given');
+        }
+        const trackJSON = await databaseFacade.trackmaniaDB.getTrack(mapUid);
+        return this.trackmaniaView.embedTrackInfo(trackJSON);
     }
     
     buttonGetTrackInfo = async (params, command_queries) => {
-        const groupUid = revertUID(params[1]);
         const mapUid = params[2];
-        const isTOTD = command_queries.length > 1 && command_queries[1] === 'totd';
-        const command = (isTOTD) ? `Track of the Day - ${params[3]}` : 'Map Search';
-        const endTimestamp = (isTOTD) ? Number(convertNumberToBase(command_queries[2], 64, 10)) : 0;
-        let callback = d => d;
-        let callbackArgs = [];
-        let track_json;
-        if (isTOTD && endTimestamp > Math.floor(Date.now() / 1000)) {
-            callback = this.cachingTOTDProvider.getData;
-        }
-        else {
-            callback = TrackmaniaWrapper.getTrackInfo(command, mapUid, groupUid);
-        }
 
-        let embeddedTOTD = this.getAndEmbedTrackInfo(callback, callbackArgs);
+        let embeddedTOTD = this.getAndEmbedTrackInfo(databaseFacade.trackmaniaDB.getTrack, [mapUid]);
         return embeddedTOTD;
     }
 
@@ -167,12 +167,8 @@ class TrackFunctions extends Function {
      * @returns 
      */
     getAndEmbedTrackInfo = async (callback, callbackArgs = []) => {
-        const track_json = await callback(...callbackArgs);
-        return this.trackmaniaView.embedTrackInfo(track_json);
-    }
-
-    commandSearchTrack = async () => {
-        return;
+        const trackJSON = await callback(...callbackArgs);
+        return this.trackmaniaView.embedTrackInfo(trackJSON);
     }
 
     
@@ -183,14 +179,14 @@ class LeaderboardFunctions extends Function {
         super();
     }
 
-    createLeaderboard = async (member, params, command_queries, track_json, accountWatchers) => {
+    createLeaderboard = async (member, params, command_queries, trackJSON, accountWatchers) => {
         const userId = member.user.id;
         const userName = member.user.username;
         const length = Number(params[3]);
         const offset = Number(params[4]);
         let getLeaderboards = [this.trackmaniaWrapper.getLeaderboard];
         let getLeaderboardsArgs = {
-            "0": [`${track_json.groupUid}/map/${track_json.mapUid}`, length, true, offset],
+            "0": [`${trackJSON.groupUid}/map/${trackJSON.mapUid}`, length, true, offset],
         };
         let FEGens = [this.trackmaniaView.getLeaderboardInfo, this.trackmaniaView.generateLeaderboardField];
         let FEGensArgs = {};
@@ -222,8 +218,8 @@ class LeaderboardFunctions extends Function {
             }
         });
 
-        track_json.leaderboard = mainLeaderboard;
-        FEGensArgs['0'] = [track_json, length, true, offset];
+        trackJSON.leaderboard = mainLeaderboard;
+        FEGensArgs['0'] = [trackJSON, length, true, offset];
         FEGensArgs['1'] = [{ name: `${userName}'s Watched Players`, }];
         FEGensArgs['1'][0].records = watchedLeaderboard;
 
@@ -238,7 +234,7 @@ class LeaderboardFunctions extends Function {
         return this.trackmaniaView.embedLeaderboardInfo(embed);
     }
 
-    updateLeaderboard = async (data, message, params, embedChangeState, track_json) => {
+    updateLeaderboard = async (data, message, params, embedChangeState, trackJSON) => {
         let args = [];
         switch (embedChangeState) {
             case 'p': // p for page selector
@@ -250,14 +246,14 @@ class LeaderboardFunctions extends Function {
         const length = Number(args[0]);
         const offset = Number(args[1]);
 
-        let leaderboard = await this.trackmaniaWrapper.getLeaderboard(`${track_json.groupUid}/map/${track_json.mapUid}`, length, true, offset);
+        let leaderboard = await this.trackmaniaWrapper.getLeaderboard(`${trackJSON.groupUid}/map/${trackJSON.mapUid}`, length, true, offset);
         const accountIds = Object.keys(leaderboard);
         const accountNames = await this.trackmaniaWrapper.getAccountName(accountIds);
         accountIds.forEach(accountId => {
             leaderboard[accountId].name = accountNames[accountId];
         });
 
-        const { records, buttons, pageSelecter } = this.trackmaniaView.updateLeaderboard(leaderboard, track_json.mapUid, track_json.groupUid, track_json.endTimestamp, length, true, offset);
+        const { records, buttons, pageSelecter } = this.trackmaniaView.updateLeaderboard(leaderboard, trackJSON.mapUid, trackJSON.groupUid, trackJSON.endTimestamp, length, true, offset);
 
         let embeds = message.embeds;
         let components = message.components;
@@ -274,18 +270,18 @@ class LeaderboardFunctions extends Function {
     }
 
     buttonGetLeaderboard = async (data, message, member, params, command_queries, embedChangeState, accountWatchers) => {
-        const track_json = {
+        const trackJSON = {
             author: message.embeds[0].author.name,
             groupUid: (params[1] !== 'Personal_Best') ? revertUID(params[1]) : params[1],
             mapUid: params[2],
             endTimestamp: undefined,
         };
-        if (command_queries[1] === 'totd') { track_json.endTimestamp = Number(convertNumberToBase(command_queries[2], 64, 10)); }
+        if (command_queries[1] === 'totd') { trackJSON.endTimestamp = Number(convertNumberToBase(command_queries[2], 64, 10)); }
         
         if (embedChangeState === 'i') { // 'i' for initialize 🤓
-            return await this.createLeaderboard(member, params, command_queries, track_json, accountWatchers);
+            return await this.createLeaderboard(member, params, command_queries, trackJSON, accountWatchers);
         } else {
-            return await this.updateLeaderboard(data, message, params, embedChangeState, track_json);
+            return await this.updateLeaderboard(data, message, params, embedChangeState, trackJSON);
         }
     }
 
@@ -295,6 +291,11 @@ class AccountsFunctions extends Function {
     constructor() {
         super();
     }
+
+    commandSearchAccounts = async () => {
+
+    }
+
 }
 
 export class TrackmaniaBotFunctions {

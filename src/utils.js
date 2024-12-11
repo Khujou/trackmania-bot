@@ -33,21 +33,15 @@ export async function DiscordRequest(endpoint, options) {
 export async function InstallGlobalCommands(appId, commands) {
     const endpoint = `applications/${appId}/commands`;
 
-    try {
-        await DiscordRequest(endpoint, { method: 'PUT', body: commands });
-    } catch (err) {
-        console.error(err);
-    }
+    await DiscordRequest(endpoint, { method: 'PUT', body: commands })
+    .catch(err => log.error(err));
 }
 
 export async function InstallGuildCommands(appId, guild_id, commands) {
     const endpoint = `applications/${appId}/guilds/${guild_id}/commands`;
 
-    try {
-        await DiscordRequest(endpoint, {method: 'PUT', body: commands});
-    } catch (err) {
-        console.error(err);
-    }
+    await DiscordRequest(endpoint, { method: 'PUT', body: commands })
+    .catch(err => log.error(err));
 }
 
 export function convertMillisecondsToFormattedTime(milliseconds) {
@@ -126,12 +120,23 @@ export function revertUID(UID) {
 }
 
 /**
- * Gets the date, with the time pushed back 13 hours :)
- * @param {*} yearsAgo 
- * @param {*} monthsAgo 
+ * 
+ * @param {*} date 
+ * @returns {number}
+ */
+export function hourDST(date = new Date()) {
+    const newYears = new Date('January 1, 1970 00:00:00 GMT+00:00');
+    const timezoneOffsetNoDST = newYears.getTimezoneOffset();
+    console.log(timezoneOffsetNoDST);
+    const timezoneOffsetDate = date.getTimezoneOffset();
+    return 18-((timezoneOffsetNoDST-timezoneOffsetDate)/60);
+}
+
+/**
+ * whatever :|
  */
 export function getDate() {
-    let date = new Date();
-    date.setUTCHours(-18);
-    return date;
+    let date = Date.now();
+    date -= (hourDST()*60*60*1000); // minus 18 hours
+    return new Date(date);
 }
