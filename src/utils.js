@@ -120,10 +120,23 @@ export function revertUID(UID) {
 }
 
 /**
+ * 
+ * @param {*} date 
+ * @returns {number}
+ */
+export function hourDST(date = new Date()) {
+    const newYears = new Date('January 1, 1970 00:00:00 GMT+00:00');
+    const timezoneOffsetNoDST = newYears.getTimezoneOffset();
+    console.log(timezoneOffsetNoDST);
+    const timezoneOffsetDate = date.getTimezoneOffset();
+    return 18-((timezoneOffsetNoDST-timezoneOffsetDate)/60);
+}
+
+/**
  * whatever :|
  */
 export function getDate() {
     let date = Date.now();
-    date -= 64800000; // minus 18 hours
+    date -= (hourDST()*60*60*1000); // minus 18 hours
     return new Date(date);
 }

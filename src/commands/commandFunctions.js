@@ -133,6 +133,25 @@ class TrackFunctions extends Function {
     commandTOTD = async () => {
         return await this.getAndEmbedTrackInfo(databaseFacade.trackmaniaDB.getTOTD);
     }
+
+    commandSearchTOTD = async (date) => {
+        date.setUTCHours(18);
+        const today = new Date().setUTCHours(18);
+        date = (date > today) ? today : date;
+        if (date < this.START_DATE) {
+            throw new Error('Date given is before Trackmania came out, silly :)');
+        }
+        const trackJSON = await databaseFacade.trackmaniaDB.getTOTD(date);
+        return this.trackmaniaView.embedTrackInfo(trackJSON);
+    }
+
+    commandSearchTrack = async (mapUid = undefined) => {
+        if (mapUid === undefined) {
+            throw new Error('MapUid not given');
+        }
+        const trackJSON = await databaseFacade.trackmaniaDB.getTrack(mapUid);
+        return this.trackmaniaView.embedTrackInfo(trackJSON);
+    }
     
     buttonGetTrackInfo = async (params, command_queries) => {
         const mapUid = params[2];
@@ -149,25 +168,6 @@ class TrackFunctions extends Function {
      */
     getAndEmbedTrackInfo = async (callback, callbackArgs = []) => {
         const trackJSON = await callback(...callbackArgs);
-        return this.trackmaniaView.embedTrackInfo(trackJSON);
-    }
-
-    commandSearchTrack = async (mapUid = undefined) => {
-        if (mapUid === undefined) {
-            throw new Error('MapUid not given');
-        }
-        const trackJSON = await databaseFacade.trackmaniaDB.getTrack(mapUid);
-        return this.trackmaniaView.embedTrackInfo(trackJSON);
-    }
-
-    commandSearchTOTD = async (date) => {
-        date.setUTCHours(18);
-        const today = new Date().setUTCHours(18);
-        date = (date > today) ? today : date;
-        if (date < this.START_DATE) {
-            throw new Error('Date given is before Trackmania came out, silly :)');
-        }
-        const trackJSON = await databaseFacade.trackmaniaDB.getTOTD(date);
         return this.trackmaniaView.embedTrackInfo(trackJSON);
     }
 

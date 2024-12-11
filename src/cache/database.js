@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
-import { getDate } from '../utils.js';
+import { getDate, hourDST } from '../utils.js';
 import { setLogLevel, getLogger, logProfile } from '../log.js';
 import { TrackmaniaWrapper, FileBasedCachingAccessTokenProvider } from '../trackmania/trackmaniaWrapper.js';
 
@@ -172,11 +172,8 @@ class TrackmaniaDatabase extends BaseDatabase {
     }
 
     getTOTD = async (date = getDate()) => {
-        console.log(date);
-        date.setUTCHours(18, 0, 0, 0);
-        console.log(date);
+        date.setUTCHours(hourDST(date), 0, 0, 0);
         const timestamp = Math.floor(date.valueOf()/1000);
-        console.log(timestamp);
         let totd = await this.getRow('totd', { startTimestamp: timestamp });
         console.log(totd);
         if (totd === undefined) {
@@ -184,8 +181,10 @@ class TrackmaniaDatabase extends BaseDatabase {
             let trackJSON = await this.trackmaniaWrapper.getTrackInfo(mapUid, groupUid);
             trackJSON.startTimestamp = startTimestamp;
             trackJSON.endTimestamp = endTimestamp;
+            console.log(trackJSON);
             await this.insertTrack(trackJSON);
-            totd = await this.getRow('totd', { startTimestamp: timestamp });
+            totd = await this.getRow('totd', { startTimestamp: startTimestamp });
+            console.log(totd);
         }
         const track = await this.getRow('tracks', { mapUid: totd.mapUid });
         const account = await this.getRow('accounts', { accountUid: track.accountUid });
