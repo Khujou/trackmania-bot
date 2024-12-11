@@ -348,7 +348,8 @@ class TrackmaniaExchangeService extends BaseService {
     }
 
     getMapInfo = async (mapUid) => {
-        return await this.fetchEndpoint('GetMapInfo', `/api/maps/get_map_info/uid/${mapUid}`);
+        return await this.fetchEndpoint('GetMapInfo', `/api/maps/get_map_info/uid/${mapUid}`)
+        .catch(err => console.log(`No TMX entry - ${err}`));
     }
 }
 
@@ -356,61 +357,74 @@ class TrackmaniaExchangeService extends BaseService {
  *  JSON of all trackmania.exchange map tags with ID, Name, and Color associated
  */ 
 const MAP_TAGS = [
-    { ID: 1, Name: 'Race', Color: '' },
-    { ID: 2, Name: 'FullSpeed', Color: '' },
-    { ID: 3, Name: 'Tech', Color: '' },
-    { ID: 4, Name: 'RPG', Color: '' },
-    { ID: 5, Name: 'LOL', Color: '' },
-    { ID: 6, Name: 'Press Forward', Color: '' },
-    { ID: 7, Name: 'SpeedTech', Color: '' },
-    { ID: 8, Name: 'MultiLap', Color: '' },
-    { ID: 9, Name: 'Offroad', Color: '705100' },
-    { ID: 10, Name: 'Trial', Color: '' },
-    { ID: 11, Name: 'ZrT', Color: '1a6300' },
-    { ID: 12, Name: 'SpeedFun', Color: '' },
-    { ID: 13, Name: 'Competitive', Color: '' },
-    { ID: 14, Name: 'Ice', Color: '05767d' },
-    { ID: 15, Name: 'Dirt', Color: '5e2d09' },
-    { ID: 16, Name: 'Stunt', Color: '' },
-    { ID: 17, Name: 'Reactor', Color: 'd04500' },
-    { ID: 18, Name: 'Platform', Color: '' },
-    { ID: 19, Name: 'Slow Motion', Color: '004388' },
-    { ID: 20, Name: 'Bumper', Color: 'aa0000' },
-    { ID: 21, Name: 'Fragile', Color: '993366' },
-    { ID: 22, Name: 'Scenery', Color: '' },
-    { ID: 23, Name: 'Kacky', Color: '' },
-    { ID: 24, Name: 'Endurance', Color: '' },
-    { ID: 25, Name: 'Mini', Color: '' },
-    { ID: 26, Name: 'Remake', Color: '' },
-    { ID: 27, Name: 'Mixed', Color: '' },
-    { ID: 28, Name: 'Nascar', Color: '' },
-    { ID: 29, Name: 'SpeedDrift', Color: '' },
-    { ID: 30, Name: 'Minigame', Color: '7e0e69' },
-    { ID: 31, Name: 'Obstacle', Color: '' },
-    { ID: 32, Name: 'Transitional', Color: '' },
-    { ID: 33, Name: 'Grass', Color: '06a805' },
-    { ID: 34, Name: 'Backwards', Color: '83aa00' },
-    { ID: 35, Name: 'Freewheel', Color: 'f2384e' },
-    { ID: 36, Name: 'Signature', Color: 'f1c438' },
-    { ID: 37, Name: 'Royal', Color: 'ff0010' },
-    { ID: 38, Name: 'Water', Color: '69dbff' },
-    { ID: 39, Name: 'Plastic', Color: 'fffc00' },
-    { ID: 40, Name: 'Arena', Color: '' },
-    { ID: 41, Name: 'Freestyle', Color: '' },
-    { ID: 42, Name: 'Educational', Color: '' },
-    { ID: 43, Name: 'Sausage', Color: '' },
-    { ID: 44, Name: 'Bobsleigh', Color: '' },
-    { ID: 45, Name: 'Pathfinding', Color: '' },
-    { ID: 46, Name: 'FlagRush', Color: '7a0000' },
-    { ID: 47, Name: 'Puzzle', Color: '459873' },
-    { ID: 48, Name: 'Freeblocking', Color: 'ffffff' },
-    { ID: 49, Name: 'Altered Nadeo', Color: '3a3a3a' },
-    { ID: 50, Name: 'SnowCar', Color: 'd3d3d3' },
-    { ID: 51, Name: 'Wood', Color: '814b00' }
+	{ID: 1,Name: "Race",Color: ""},
+	{ID: 2,Name: "FullSpeed",Color: ""},
+	{ID: 3,Name: "Tech",Color: ""},
+	{ID: 4,Name: "RPG",Color: ""},
+	{ID: 5,Name: "LOL",Color: ""},
+	{ID: 6,Name: "Press Forward",Color: ""},
+	{ID: 7,Name: "SpeedTech",Color: ""},
+	{ID: 8,Name: "MultiLap",Color: ""},
+	{ID: 9,Name: "Offroad",Color: "705100"},
+	{ID: 10,Name: "Trial",Color: ""},
+	{ID: 11,Name: "ZrT",Color: "1a6300"},
+	{ID: 12,Name: "SpeedFun",Color: ""},
+	{ID: 13,Name: "Competitive",Color: ""},
+	{ID: 14,Name: "Ice",Color: "05767d"},
+	{ID: 15,Name: "Dirt",Color: "5e2d09"},
+	{ID: 16,Name: "Stunt",Color: ""},
+	{ID: 17,Name: "Reactor",Color: "d04500"},
+	{ID: 18,Name: "Platform",Color: ""},
+	{ID: 19,Name: "Slow Motion",Color: "004388"},
+	{ID: 20,Name: "Bumper",Color: "aa0000"},
+	{ID: 21,Name: "Fragile",Color: "993366"},
+	{ID: 22,Name: "Scenery",Color: ""},
+	{ID: 23,Name: "Kacky",Color: ""},
+	{ID: 24,Name: "Endurance",Color: ""},
+	{ID: 25,Name: "Mini",Color: ""},
+	{ID: 26,Name: "Remake",Color: ""},
+	{ID: 27,Name: "Mixed",Color: ""},
+	{ID: 28,Name: "Nascar",Color: ""},
+	{ID: 29,Name: "SpeedDrift",Color: ""},
+	{ID: 30,Name: "Minigame",Color: "7e0e69"},
+	{ID: 31,Name: "Obstacle",Color: ""},
+	{ID: 32,Name: "Transitional",Color: ""},
+	{ID: 33,Name: "Grass",Color: "06a805"},
+	{ID: 34,Name: "Backwards",Color: "83aa00"},
+	{ID: 35,Name: "EngineOff",Color: "f2384e"},
+	{ID: 36,Name: "Signature",Color: "f1c438"},
+	{ID: 37,Name: "Royal",Color: "ff0010"},
+	{ID: 38,Name: "Water",Color: "69dbff"},
+	{ID: 39,Name: "Plastic",Color: "fffc00"},
+	{ID: 40,Name: "Arena",Color: ""},
+	{ID: 41,Name: "Freestyle",Color: ""},
+	{ID: 42,Name: "Educational",Color: ""},
+	{ ID: 43, Name: "Sausage", Color: "" },
+	{ ID: 44, Name: "Bobsleigh", Color: "" },
+	{ ID: 45, Name: "Pathfinding", Color: "" },
+	{ ID: 46, Name: "FlagRush", Color: "7a0000" },
+	{ ID: 47, Name: "Puzzle", Color: "459873" },
+	{ ID: 48, Name: "Freeblocking", Color: "ffffff" },
+	{ ID: 49, Name: "Altered Nadeo", Color: "3a3a3a" },
+	{ ID: 50, Name: "SnowCar", Color: "de4949" },
+	{ ID: 51, Name: "Wood", Color: "814b00" },
+	{ ID: 52, Name: "Underwater", Color: "03afff" },
+	{ ID: 53, Name: "Turtle", Color: "6bb74e" },
+	{ ID: 54, Name: "RallyCar", Color: "ff8c00" },
+	{ ID: 55, Name: "MixedCar", Color: "000000" },
+	{ ID: 56, Name: "Bugslide", Color: "4b7933" },
+	{ ID: 57, Name: "Mudslide", Color: "855925" },
+	{ ID: 58, Name: "Moving Items", Color: "e0dc82" },
+	{ ID: 59, Name: "DesertCar", Color: "f6ca4a" },
+	{ ID: 60, Name: "SpeedMapping", Color: "bd46b0" },
+	{ ID: 61, Name: "NoBrake", Color: "" },
+	{ ID: 62, Name: "CruiseControl", Color: "" },
+    { ID: 63, Name: "NoSteer", Color: "" },
+	{ ID: 64, Name: "RPG-Immersive", Color: "" },
+	{ ID: 65, Name: "Pipes", Color: "" },
+	{ ID: 66, Name: "Magnet", Color: "" },
+	{ ID: 67, Name: "NoGrip", Color: "" }
 ];
-
-const DAYS = ['Mon.', 'Tue.', 'Wed.', 'Thur.', 'Fri.', 'Sat.', 'Sun.'];
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export class TrackmaniaWrapper {
     constructor(tokenProviderFactory) {
@@ -432,15 +446,13 @@ export class TrackmaniaWrapper {
          */
         const currDate = getDate();
         const offset = ((currDate.getUTCFullYear() - inputDate.getUTCFullYear()) * 12) + ((currDate.getUTCMonth()) - inputDate.getUTCMonth());
-        const totd = await this.liveService.trackOfTheDay(offset, inputDate.getUTCDate());
-
-        console.log(totd);
+        const {mapUid, seasonUid, startTimestamp, endTimestamp} = await this.liveService.trackOfTheDay(offset, inputDate.getUTCDate());
 
         return {
-            mapUid: totd.mapUid,
-            groupUid: totd.seasonUid,
-            startTimestamp: totd.startTimestamp,
-            endTimestamp: totd.endTimestamp,
+            mapUid: mapUid,
+            groupUid: seasonUid,
+            startTimestamp: startTimestamp,
+            endTimestamp: endTimestamp,
         };
     }
 
@@ -451,20 +463,18 @@ export class TrackmaniaWrapper {
      * @param {string} [groupUid='Personal_Best']
      * @returns {Promise<{}>}
      */
-    getTrackInfo = async (mapUid, groupUid = null) => {
-        const promises = await Promise.all([
+    getTrackInfo = async (mapUid, groupUid = 'Personal_Best') => {
+        const [nadeo_map_info, tmx_map_info] = await Promise.all([
             await this.coreService.getMapInfo(undefined, mapUid).then(response => response[0]),
             await this.exchangeService.getMapInfo(mapUid).catch(err => log.info(err)),
         ]);
 
-        const nadeo_map_info = promises[0];
-        const tmx_map_info = promises[1];
-
         console.log(nadeo_map_info);
+        console.log(tmx_map_info);
 
         const accountName = await this.getAccountName([nadeo_map_info.author]);
 
-        let track_json = {
+        let trackJSON = {
             mapUid: mapUid,
             mapId: nadeo_map_info.mapId,
             mapName: nadeo_map_info.filename.slice(0,-8),
@@ -475,15 +485,9 @@ export class TrackmaniaWrapper {
             goldTime: nadeo_map_info.goldScore,
             silverTime: nadeo_map_info.silverScore,
             bronzeTime: nadeo_map_info.bronzeScore,
+            updateTimestamp: Math.floor(Date.parse(nadeo_map_info.timestamp)/1000),
+            groupUid: groupUid,
         }
-
-        if (groupUid != null) {
-            track_json.groupUid = groupUid;
-        }
-
-        console.log(track_json.bleh);
-
-        console.log(tmx_map_info);
 
         /**
          * Tries to find the track on trackmania.exchange. If it can, updates attributes of map
@@ -492,17 +496,23 @@ export class TrackmaniaWrapper {
          */
 
         if (tmx_map_info !== undefined) {
-            track_json.mapName = tmx_map_info.Name
-            track_json.userID = tmx_map_info.UserID,
-            track_json.trackID = tmx_map_info.TrackID;
-            track_json.accountNameTMX = tmx_map_info.Username;
-            track_json.tags = tmx_map_info.Tags.split(',').map(tag => MAP_TAGS[parseInt(tag) - 1]?.Name).join('\n');
-            track_json.style = parseInt(MAP_TAGS.find(tag => tag.Name === tmx_map_info.StyleName)?.Color, 16);
+            trackJSON.mapName = tmx_map_info.Name
+            trackJSON.userID = tmx_map_info.UserID,
+            trackJSON.trackID = tmx_map_info.TrackID;
+            trackJSON.userNameTMX = tmx_map_info.Username;
+            trackJSON.tags = tmx_map_info.Tags.split(',').map(tag => MAP_TAGS[parseInt(tag) - 1]?.Name).join('\n');
+            trackJSON.style = parseInt(MAP_TAGS.find(tagJSON => 
+                trackJSON.tags.split('\n').find(tag => 
+                    (tagJSON.Name === tag && tagJSON.Color !== '')
+                )
+            )?.Color, 16);
+            trackJSON.difficulty = tmx_map_info.DifficultyName;
+            trackJSON.awardCount = tmx_map_info.AwardCount;
         }
 
-        console.log(track_json);
+        console.log(trackJSON);
 
-        return track_json;
+        return trackJSON;
     }
 
     cupOfTheDay = async () => {
@@ -517,7 +527,7 @@ export class TrackmaniaWrapper {
 
     /**
      * 
-     * @param {Callback} callback 
+     * @param {(d) => d} callback 
      * @param {any[]} args 
      * @param {Callback} getTime 
      * @returns {Promise<{}>}

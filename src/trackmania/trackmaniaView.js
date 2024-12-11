@@ -166,40 +166,57 @@ export class TrackmaniaView {
 
     /**
      * creates a discord-compatible json using parsed info from Nadeo and Trackmania.Exchange
-     * @param {{}}} track_json
+     * @param {{}}} trackJSON
      * @returns
      */
-    embedTrackInfo = (track_json) => {
-        const { mapUid, mapId, mapName, accountUid, accountName, mapType, 
-            authorTime, goldTime, silverTime, bronzeTime, userID, trackID, accountNameTMX, 
-            tags, style, groupUid, startTimestamp, endTimestamp } = track_json;
+    embedTrackInfo = (trackJSON) => {
+        const { mapUid, mapId, mapName, accountUid, accountName, mapType, authorTime, goldTime, 
+            silverTime, bronzeTime, updateTimestamp, userID, trackID, accountNameTMX, tags, 
+            style, difficulty, awardCount, groupUid, startTimestamp, endTimestamp } = trackJSON;
 
         const medal_times = [
-            `<:author:1313817834391998534> ${convertMS(authorTime)}`,
-            `<:gold:1313817803534635050> ${convertMS(goldTime)}`,
-            `<:silver:1313819850094678056> ${convertMS(silverTime)}`,
-            `<:bronze:1313819823452721202> ${convertMS(bronzeTime)}`
+            `<:author:1313817834391998534> \`${convertMS(authorTime)}\``,
+            `<:gold:1313817803534635050> \`${convertMS(goldTime)}\``,
+            `<:silver:1313819850094678056> \`${convertMS(silverTime)}\``,
+            `<:bronze:1313819823452721202> \`${convertMS(bronzeTime)}\``
         ].join('\n');
 
         const { encodedGroupUid, encodedTimestamp } = toBase64(groupUid, endTimestamp);
-        const encodedMapId = convertNumberToBase(track_json.mapId.split('-').join(''), 16, 64);
+        const encodedMapId = convertNumberToBase(mapId.split('-').join(''), 16, 64);
 
         const res = {
             embeds: [{
-                author: { name: (groupUid !== undefined) ? `Track of the Day - ${new Date(startTimestamp*1000).toLocaleDateString(undefined, {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                })}` : 'Map Search', },
+                author: { 
+                    name: (groupUid !== 'Personal_Best') ? `Track of the Day - ${new Date(startTimestamp*1000).toLocaleDateString(undefined, {
+                        weekday: 'short',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                    })}` : 'Map Search',
+                    url: `https://www.trackmania.com/tracks/${mapUid}`, 
+                },
                 title: mapName,
-                description: `Made by ${accountName} ${(accountNameTMX !== undefined) ? `(${accountNameTMX} on TMX)` : ''}`,
+                description: `Made by ${accountName}` + 
+                `${(trackID !== undefined) ? ` ( ${accountNameTMX} on TMX )` : ''}`,
                 color: style,
                 fields: [{
+                    name: 'Last updated',
+                    value: `<t:${updateTimestamp}:R>`,
+                    inline: true,
+                },{
                     name: 'Medal Times',
                     value: medal_times,
                     inline: true,
-                }],
+                }, ...(trackID !== undefined) ? [{
+                    name: 'Map Tags',
+                    value: (trackID !== undefined) ? tags : 'N/A',
+                    inline: true,
+                },{
+                    name: 'TMX Info',
+                    value: (trackID !== undefined) ? `:video_game: ${difficulty}\n` +
+                    `:trophy: ${awardCount} Awards` : 'N/A',
+                    inline: true,
+                }] : []],
                 image: {
                     url: `https://core.trackmania.nadeo.live/maps/${mapId}/thumbnail.jpg`,
                     height: 100,
@@ -207,7 +224,7 @@ export class TrackmaniaView {
                 },
                 footer: {
                     text: `Map UID: ${mapUid}\n` + 
-                    `Provided by Nadeo ${(trackID !== undefined) ? 'and Trackmania.Exchange' : ''}`,
+                    `Provided by Nadeo` + `${(trackID !== undefined) ? ' and Trackmania.Exchange' : ''}`,
                 },
             },],
             components: [{
@@ -224,32 +241,24 @@ export class TrackmaniaView {
                 },{
                     type: MessageComponentTypes.BUTTON,
                     style: ButtonStyleTypes.LINK,
-                    label: 'Trackmania.io',
-                    url: `https://trackmania.io/#/totd/leaderboard/${groupUid}/${mapUid}`,
-                }],
+                    label: 'TrackMania.io',
+                    url: `https://www.trackmania.io/#/totd/leaderboard/${mapId}/${mapUid}`,
+                }, ...(trackID !== undefined) ? [{
+                    type: MessageComponentTypes.BUTTON,
+                    style: ButtonStyleTypes.LINK,
+                    label: 'TrackMania.exchange',
+                    url: `https://trackmania.exchange/s/tr/${trackID}`,
+                }] : []],
             },],
         };
-
+        /*
         if (tags !== undefined) {
             res.embeds[0].fields.push({
                 name: 'Map Tags',
                 value: tags,
                 inline: true,
             });
-        }
-
-        if (trackID !== undefined) {
-            res.components[0].components.push({
-                type: MessageComponentTypes.BUTTON,
-                style: ButtonStyleTypes.LINK,
-                label: 'Trackmania.Exchange',
-                url: `https://trackmania.exchange/s/tr/${trackID}`,
-                emoji: {
-                    id: null,
-                    name: '💻',
-                },
-            });
-        }
+        } */
 
         return res;
     }

@@ -49,6 +49,7 @@ class BaseDatabase {
         const sqlCode = 
             `SELECT EXISTS(SELECT 1 FROM ${table} WHERE ${col}=?)`;
         const res = await db.get(sqlCode, key[col]);
+        console.log(res);
         db.close();
         const reskey = Object.keys(res);
         return Boolean(res[reskey[0]]);
@@ -58,6 +59,7 @@ class BaseDatabase {
      * 
      * @param {string} table 
      * @param {{pkCol: pkVal}} pk 
+     * @returns {Promise<{}> | undefined}
      */
     getRow = async (table, pk) => {
         const db = await open({
@@ -67,7 +69,7 @@ class BaseDatabase {
         const pkName = Object.keys(pk)[0];
         const sqlCode = 
             `SELECT * FROM ${table} WHERE ${pkName} = ?`;
-        const res = await db.get(sqlCode, pk[pkName]).catch(err => log.error(err));
+        const res = await db.get(sqlCode, pk[pkName]);
         db.close();
         return res;
         
@@ -125,40 +127,42 @@ class TrackmaniaDatabase extends BaseDatabase {
         await this.createTable('accounts', {
             accountUid: 'TEXT PRIMARY KEY NOT NULL',
             accountName: 'TEXT NOT NULL',
-            accountNameTMX: 'TEXT',
         });
         
         await this.createTable('tracks', {
             mapUid: 'TEXT PRIMARY KEY NOT NULL',
             mapId: 'TEXT NOT NULL',
             mapName: 'TEXT NOT NULL',
-            accountName:'TEXT NOT NULL',
             accountUid: 'TEXT NOT NULL',
-            thumbnail: 'TEXT NOT NULL',
             mapType: 'TEXT NOT NULL',
             authorTime: 'INTEGER NOT NULL',
             goldTime: 'INTEGER NOT NULL',
             silverTime: 'INTEGER NOT NULL',
             bronzeTime: 'INTEGER NOT NULL',
-            refreshTime: 'INTEGER',
+            updateTimestamp: 'INTEGER NOT NULL', // when it was updated on nadeo servers
+            refreshTimestamp: 'INTEGER', // will either be a timestamp for when the bot will try and get info from tmx, or null if the info is already stored
         }, {
             accountUid: ['accounts', 'accountUid'],
         });
         
         await this.createTable('tmxtracks', {
-            mapUid: 'TEXT PRIMARY KEY NOT NULL',
+            trackID: 'INTEGER PRIMARY KEY NOT NULL',
+            mapUid: 'TEXT NOT NULL',
+            userID: 'INTEGER NOT NULL',
+            userNameTMX: 'TEXT NOT NULL',
             tags: 'TEXT NOT NULL',
-            website: 'TEXT NOT NULL',
-            styleName: 'INTEGER NOT NULL',
+            style: 'INTEGER',
+            difficulty: 'TEXT NOT NULL',
+            awardCount: 'INTEGER NOT NULL',
         }, {
             mapUid: ['tracks', 'mapUid'],
         });
         
         await this.createTable('totd', {
-            mapUid: 'TEXT PRIMARY KEY NOT NULL',
-            groupUid: 'TEXT NOT NULL',
-            startTimestamp: 'INTEGER NOT NULL',
+            startTimestamp: 'INTEGER PRIMARY KEY NOT NULL',
             endTimestamp: 'INTEGER NOT NULL',
+            mapUid: 'TEXT NOT NULL',
+            groupUid: 'TEXT NOT NULL',
         }, {
             mapUid: ['tracks', 'mapUid'],
         });
@@ -167,31 +171,49 @@ class TrackmaniaDatabase extends BaseDatabase {
     getTOTD = async (date = new Date()) => {
         date.setUTCHours(18);
         const timestamp = Math.floor(date.valueOf()/1000);
-        const totd = await this.getRow('totd', { startTimestamp: timestamp }).catch(err => log.error(`Unable to complete operation - ${err}`));
-        if (totd !== undefined) {
-            const track = await this.getRow('tracks', { mapUid: totd.mapUid }).catch(err => log.error(`Unable to complete operation - ${err}`));
-            return Object.assign(totd, track);
+        const totd = await this.getRow('totd', { startTimestamp: timestamp });
+        if (totd === undefined) {
+            return totd;
         }
-        return undefined;
+        const track = await this.getRow('tracks', { mapUid: totd.mapUid });
+        const account = await this.getRow('accounts', { accountUid: track.accountUid });
+        const tmx = await this.getRow('tmxtracks', { mapUid: totd.mapUid });
+        
+        return Object.assign(track, account, totd, tmx);
     }
 
     getTrack = async(mapUid) => {
-        const totd = await this.getRow('totd', { mapUid: mapUid }).catch(err => log.error(`Unable to complete operation - ${err}`));
-        const track = await this.getRow('tracks', { mapUid: mapUid }).catch(err => log.error(`Unable to complete operation - ${err}`));
-        if (totd !== undefined) {
-            return Object.assign(totd, track);
+        const track = await this.getRow('tracks', { mapUid: mapUid });
+        if (track === undefined) {
+            return track;
         }
-        return track;
+        const account = await this.getRow('accounts', { accountUid: track.accountUid });
+        const totd = await this.getRow('totd', { mapUid: mapUid });
+        const tmx = await this.getRow('tmxtracks', { mapUid: mapUid });
+
+        return Object.assign(track, account, totd, tmx);
     }
 
     /**
-     * 
-     * @param {{}} trackJson 
+     * First assert that the account of the map creator is in the accounts db, 
+     * then insert the base nadeo info of the track into the tracks table,
+     * then, if available, insert the totd and tmx info into the respective tables
+     * @param {{}} trackJSON 
      */
-    insertOrUpdateTrack = async (trackJson) => {
-        if (trackJson.hasOwnProperty('groupUid') && await this.checkRow('totd', { mapUid: trackJson.mapUid }) === false) {
+    insertOrUpdateTrack = async (trackJSON) => {
+
+        if (await this.checkRow('accounts', { accountUid: trackJSON.accountUid }) === false) {
+            await this.insertRow('accounts', {
+                accountUid: trackJSON.accountUid,
+                accountName: trackJSON.accountName,
+            });
+        }
+        delete trackJSON.accountName;
+
+
+        if (trackJSON.hasOwnProperty('startTimestamp') && await this.checkRow('totd', { mapUid: trackJSON.mapUid }) === false) {
             console.log('hi');
-            const { mapUid, groupUid, startTimestamp, endTimestamp } = trackJson;
+            const { mapUid, groupUid, startTimestamp, endTimestamp } = trackJSON;
             await this.insertRow('totd', {
                 mapUid: mapUid,
                 groupUid: groupUid,
@@ -200,42 +222,33 @@ class TrackmaniaDatabase extends BaseDatabase {
             });
         }
         for (const key of ['groupUid', 'startTimestamp', 'endTimestamp']) {
-            delete trackJson[key];
+            delete trackJSON[key];
         }
 
-        trackJson.refreshTime = Math.floor(Date.now()/1000) + 600;
+        trackJSON.refreshTimestamp = Math.floor(Date.now()/1000) + 600;
 
-        if (await this.checkRow('accounts', { accountUid: trackJson.accountUid }) === false) {
-            await this.insertRow('accounts', {
-                accountUid: trackJson.accountUid,
-                accountName: trackJson.authorName,
-                accountNameTMX: trackJson.authorNameTMX | null
-            });
-        } else if (trackJson.hasOwnProperty('authorNameTMX') && await this.getRow('accounts', { accountUid: trackJson.accountUid }).accountNameTMX === null) {
-            await this.updateRow('accounts', {
-                accountNameTMX: trackJson.authorNameTMX,
-            })
-        }
-        delete trackJson.authorNameTMX;
-
-        if (trackJson.hasOwnProperty('website') && await this.checkRow('tmxtracks', { mapUid: trackJson.mapUid }) === false) {
+        if (trackJSON.hasOwnProperty('trackID') && await this.checkRow('tmxtracks', { mapUid: trackJSON.mapUid }) === false) {
             await this.insertRow('tmxtracks', {
-                mapUid: trackJson.mapUid,
-                tags: trackJson.tags,
-                website: trackJson.website,
-                styleName: trackJson.styleName
+                trackID: trackJSON.trackID,
+                mapUid: trackJSON.mapUid,
+                userID: trackJSON.userID,
+                userNameTMX: trackJSON.userNameTMX,
+                tags: trackJSON.tags,
+                style: trackJSON.style,
+                difficulty: trackJSON.difficulty,
+                awardCount: trackJSON.awardCount,
             });
         }
-        for (const key of ['tags', 'website', 'styleName']) {
-            delete trackJson[key];
+        for (const key of ['userID', 'trackID', 'userNameTMX', 'tags', 'style', 'difficulty', 'awardCount']) {
+            delete trackJSON[key];
         }
 
-        if (await this.checkRow('tracks', { mapUid: trackJson.mapUid }) === false) {
-            await this.insertRow('tracks', trackJson);
+        if (await this.checkRow('tracks', { mapUid: trackJSON.mapUid }) === false) {
+            await this.insertRow('tracks', trackJSON);
         }
     }
 
-    updateTrack = async (trackJson) => {
+    updateTrack = async (trackJSON) => {
 
     }
 }

@@ -27,12 +27,17 @@ const databaseFacade = await getDatabaseFacade();
 
 log.info('hi hi hi ');
 
-console.log(await databaseFacade.trackmaniaDB.getTrack('xNv75plrEXTqMQmsBbrsoVjnAA8')); //returns json
-console.log(await databaseFacade.trackmaniaDB.getTrack('5L9z1oBNibL2F6rbozHI5wp_5el')); //returns undefined
+let track;
 
-console.log(await databaseFacade.trackmaniaDB.getTOTD(new Date(2024, 11, 4))); //return json
-console.log(await databaseFacade.trackmaniaDB.getTOTD(new Date(2024, 11, 5))); //return undefined
+track = await logProfile(log, 'GetCachedDBData', async() => await databaseFacade.trackmaniaDB.getTrack('lbytViu4krWqqid5fhP4S80plz1')); //returns json
+console.log(track);
+track = await logProfile(log, 'GetCachedDBData', async() => await databaseFacade.trackmaniaDB.getTrack('5L9z1oBNibL2F6rbozHI5wp_5el')); //returns undefined
+console.log(track);
 
+track = await logProfile(log, 'GetCachedDBData', async() => await databaseFacade.trackmaniaDB.getTOTD(new Date(2024, 11, 10))); //return json
+console.log(track);
+track = await logProfile(log, 'GetCachedDBData', async() => await databaseFacade.trackmaniaDB.getTOTD(new Date(2024, 11, 5))); //return undefined
+console.log(track);
 
 const accountWatchers = {
     '205541764206034944': ['c3ed703f-8a07-49c7-a3b3-06713f548142'],
@@ -40,7 +45,7 @@ const accountWatchers = {
 };
 const TOTD_TIME = new Date(Date.UTC(0, 0, 0, 18));
 
-const debugData = await logProfile(log, 'GetCachedTmData', () => trackmaniaBot.track.cachingTOTDProvider.getData());
+const debugData = await logProfile(log, 'GetCachedTmData', async() => await trackmaniaBot.track.cachingTOTDProvider.getData());
 log.info(JSON.stringify(debugData));
 
 const totdChannels = ['1183478764856942642',
@@ -54,7 +59,7 @@ const sendTOTDDaily = schedule.scheduleJob(`1 ${TOTD_TIME.getHours()} * * *`, as
         await DiscordRequest(`channels/${totdChannel}/messages`, {
             method: 'POST',
             body: embeddedTotd,
-        }).catch(err => console.error(err));
+        }).catch(err => log.error(err));
     };
     
 });
@@ -95,12 +100,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 
                 break;
             case 'totd':
-                switch(options.name) {
-                    case 'past':
-                        break;
-                    default:
-                        break;
-                }
                 res.send({
                     type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
                     data: {
@@ -122,14 +121,33 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                         flags: InteractionResponseFlags.EPHEMERAL,
                     }
                 });
-                switch(options.name) {
+
+                const commandSpec = options[0];
+                const fields = commandSpec.options;
+                let body;
+
+                switch(commandSpec.name) {
                     case 'account':
+
                         break;
                     case 'map':
+                        body = await trackmaniaBot.track.commandSearchTrack(fields[0].value);
+
+                        break;
+                    case 'totd':
+                        body = await trackmaniaBot.track.commandSearchTOTD(new Date(fields[0].value, fields[1].value - 1, fields[2].value));
+
                         break;
                     default:
-
+                        embeddedErrorMessage(RUD_endpoint, 'PATCH', new Error('Not yet implemented'));
                 }
+
+                await DiscordRequest(RUD_endpoint, {
+                    method: 'PATCH',
+                    body: body
+                })
+                .catch(err => embeddedErrorMessage(RUD_endpoint, 'PATCH', err));
+
                 break;
             default:
                 res.send({

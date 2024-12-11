@@ -26,7 +26,7 @@ const SEARCH = {
         options: [{
             name: 'uid',
             description: 'uid of the account',
-            type: 4,
+            type: 3,
             required: true,
         }],
     },{
@@ -36,22 +36,13 @@ const SEARCH = {
         options: [{
             name: 'uid',
             description: 'uid of the map',
-            type: 4,
+            type: 3,
             required: true,
+            min_length: 27,
+            max_length: 27,
         }],
-    }],
-}
-
-const TRACK_OF_THE_DAY_COMMAND = {
-    name: 'totd',
-    description: 'track of the day command',
-    type: 1,
-    options: [{
-        name: 'today',
-        description: 'Get today\'s Track of the Day',
-        type: 1,
     },{
-        name: 'past',
+        name: 'totd',
         description: 'Input a date to get a specific Track of the Day',
         type: 1,
         options: [{
@@ -76,6 +67,12 @@ const TRACK_OF_THE_DAY_COMMAND = {
             max_value: 31,
         },]
     }],
+}
+
+const TRACK_OF_THE_DAY_COMMAND = {
+    name: 'totd',
+    description: 'Get the current Track of the Day',
+    type: 1,
 };
 
 const TUCKER = {
