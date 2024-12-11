@@ -171,7 +171,7 @@ export class TrackmaniaView {
      */
     embedTrackInfo = (trackJSON) => {
         const { mapUid, mapId, mapName, accountUid, accountName, mapType, authorTime, goldTime, 
-            silverTime, bronzeTime, updateTimestamp, userID, trackID, accountNameTMX, tags, 
+            silverTime, bronzeTime, updateTimestamp, userID, trackID, userNameTMX, tags, 
             style, difficulty, awardCount, groupUid, startTimestamp, endTimestamp } = trackJSON;
 
         const medal_times = [
@@ -197,7 +197,7 @@ export class TrackmaniaView {
                 },
                 title: mapName,
                 description: `Made by ${accountName}` + 
-                `${(trackID !== undefined) ? ` ( ${accountNameTMX} on TMX )` : ''}`,
+                `${(trackID !== undefined) ? ` ( ${userNameTMX} on TMX )` : ''}`,
                 color: style,
                 fields: [{
                     name: 'Last updated',

@@ -25,20 +25,6 @@ const testing = new TestingClass();
 const trackmaniaBot = new TrackmaniaBotFunctions();
 const databaseFacade = await getDatabaseFacade();
 
-log.info('hi hi hi ');
-
-let track;
-
-track = await logProfile(log, 'GetCachedDBData', async() => await databaseFacade.trackmaniaDB.getTrack('lbytViu4krWqqid5fhP4S80plz1')); //returns json
-console.log(track);
-track = await logProfile(log, 'GetCachedDBData', async() => await databaseFacade.trackmaniaDB.getTrack('5L9z1oBNibL2F6rbozHI5wp_5el')); //returns undefined
-console.log(track);
-
-track = await logProfile(log, 'GetCachedDBData', async() => await databaseFacade.trackmaniaDB.getTOTD(new Date(2024, 11, 10))); //return json
-console.log(track);
-track = await logProfile(log, 'GetCachedDBData', async() => await databaseFacade.trackmaniaDB.getTOTD(new Date(2024, 11, 5))); //return undefined
-console.log(track);
-
 const accountWatchers = {
     '205541764206034944': ['c3ed703f-8a07-49c7-a3b3-06713f548142'],
     '500722458056327196': ['c3ed703f-8a07-49c7-a3b3-06713f548142'],
@@ -48,13 +34,15 @@ const TOTD_TIME = new Date(Date.UTC(0, 0, 0, 18));
 const debugData = await logProfile(log, 'GetCachedTmData', async() => await trackmaniaBot.track.cachingTOTDProvider.getData());
 log.info(JSON.stringify(debugData));
 
-const totdChannels = ['1183478764856942642',
-    '1313152767820566598'];
+const totdChannels = [
+    //'1183478764856942642',
+    '1313152767820566598'
+];
 
 checkIfTOTDPostedToday(totdChannels[0]);
 
 const sendTOTDDaily = schedule.scheduleJob(`1 ${TOTD_TIME.getHours()} * * *`, async() => {
-    const embeddedTotd = await trackmaniaBot.track.getAndEmbedTrackInfo(trackmaniaBot.track.cachingTOTDProvider.getData);
+    const embeddedTotd = await trackmaniaBot.track.getAndEmbedTrackInfo(databaseFacade.trackmaniaDB.getTOTD);
     for (const totdChannel of totdChannels) {
         await DiscordRequest(`channels/${totdChannel}/messages`, {
             method: 'POST',

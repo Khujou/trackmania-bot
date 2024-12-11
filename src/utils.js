@@ -124,6 +124,6 @@ export function revertUID(UID) {
  */
 export function getDate() {
     let date = Date.now();
-    date -= 64800000;
+    date -= 64800000; // minus 18 hours
     return new Date(date);
 }

@@ -1,7 +1,9 @@
 import 'dotenv/config';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
+import { getDate } from '../utils.js';
 import { setLogLevel, getLogger, logProfile } from '../log.js';
+import { TrackmaniaWrapper, FileBasedCachingAccessTokenProvider } from '../trackmania/trackmaniaWrapper.js';
 
 const log = getLogger();
 
@@ -120,7 +122,8 @@ class BaseDatabase {
 class TrackmaniaDatabase extends BaseDatabase {
     constructor(databaseFilepath) {
         super(databaseFilepath);
-
+        this.trackmaniaWrapper = new TrackmaniaWrapper((identifier, fetchFunction) => 
+            new FileBasedCachingAccessTokenProvider(`accessToken-${identifier}.json`, fetchFunction));
     }
 
     setUpTables = async () => {
@@ -168,12 +171,21 @@ class TrackmaniaDatabase extends BaseDatabase {
         });
     }
 
-    getTOTD = async (date = new Date()) => {
-        date.setUTCHours(18);
+    getTOTD = async (date = getDate()) => {
+        console.log(date);
+        date.setUTCHours(18, 0, 0, 0);
+        console.log(date);
         const timestamp = Math.floor(date.valueOf()/1000);
-        const totd = await this.getRow('totd', { startTimestamp: timestamp });
+        console.log(timestamp);
+        let totd = await this.getRow('totd', { startTimestamp: timestamp });
+        console.log(totd);
         if (totd === undefined) {
-            return totd;
+            const { mapUid, groupUid, startTimestamp, endTimestamp } = await this.trackmaniaWrapper.trackOfTheDay(date);
+            let trackJSON = await this.trackmaniaWrapper.getTrackInfo(mapUid, groupUid);
+            trackJSON.startTimestamp = startTimestamp;
+            trackJSON.endTimestamp = endTimestamp;
+            await this.insertTrack(trackJSON);
+            totd = await this.getRow('totd', { startTimestamp: timestamp });
         }
         const track = await this.getRow('tracks', { mapUid: totd.mapUid });
         const account = await this.getRow('accounts', { accountUid: track.accountUid });
@@ -183,9 +195,10 @@ class TrackmaniaDatabase extends BaseDatabase {
     }
 
     getTrack = async(mapUid) => {
-        const track = await this.getRow('tracks', { mapUid: mapUid });
+        let track = await this.getRow('tracks', { mapUid: mapUid });
         if (track === undefined) {
-            return track;
+            await this.insertTrack(await this.trackmaniaWrapper.getTrackInfo(mapUid));
+            track = await this.getRow('tracks', { mapUid: mapUid });
         }
         const account = await this.getRow('accounts', { accountUid: track.accountUid });
         const totd = await this.getRow('totd', { mapUid: mapUid });
@@ -200,7 +213,7 @@ class TrackmaniaDatabase extends BaseDatabase {
      * then, if available, insert the totd and tmx info into the respective tables
      * @param {{}} trackJSON 
      */
-    insertOrUpdateTrack = async (trackJSON) => {
+    insertTrack = async (trackJSON) => {
 
         if (await this.checkRow('accounts', { accountUid: trackJSON.accountUid }) === false) {
             await this.insertRow('accounts', {
@@ -212,7 +225,6 @@ class TrackmaniaDatabase extends BaseDatabase {
 
 
         if (trackJSON.hasOwnProperty('startTimestamp') && await this.checkRow('totd', { mapUid: trackJSON.mapUid }) === false) {
-            console.log('hi');
             const { mapUid, groupUid, startTimestamp, endTimestamp } = trackJSON;
             await this.insertRow('totd', {
                 mapUid: mapUid,

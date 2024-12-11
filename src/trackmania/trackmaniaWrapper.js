@@ -469,9 +469,6 @@ export class TrackmaniaWrapper {
             await this.exchangeService.getMapInfo(mapUid).catch(err => log.info(err)),
         ]);
 
-        console.log(nadeo_map_info);
-        console.log(tmx_map_info);
-
         const accountName = await this.getAccountName([nadeo_map_info.author]);
 
         let trackJSON = {
@@ -509,8 +506,6 @@ export class TrackmaniaWrapper {
             trackJSON.difficulty = tmx_map_info.DifficultyName;
             trackJSON.awardCount = tmx_map_info.AwardCount;
         }
-
-        console.log(trackJSON);
 
         return trackJSON;
     }

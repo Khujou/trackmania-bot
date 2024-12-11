@@ -13,7 +13,7 @@ import { TrackmaniaView } from '../trackmania/trackmaniaView.js';
 import { getDatabaseFacade } from '../cache/database.js';
 
 const log = getLogger();
-const databaseFacade = getDatabaseFacade();
+const databaseFacade = await getDatabaseFacade();
 
 export class TestingClass {
     constructor() {
@@ -131,8 +131,7 @@ class TrackFunctions extends Function {
     START_DATE = new Date(2020, 6, 1);
 
     commandTOTD = async () => {
-
-        return await this.getAndEmbedTrackInfo(this.cachingTOTDProvider.getData);
+        return await this.getAndEmbedTrackInfo(databaseFacade.trackmaniaDB.getTOTD);
     }
     
     buttonGetTrackInfo = async (params, command_queries) => {
@@ -147,7 +146,7 @@ class TrackFunctions extends Function {
             callback = this.cachingTOTDProvider.getData;
         }
         else {
-            callback = TrackmaniaWrapper.getTrackInfo(command, mapUid, groupUid);
+            callback = this.trackmaniaWrapper.getTrackInfo(command, mapUid, groupUid);
         }
 
         let embeddedTOTD = this.getAndEmbedTrackInfo(callback, callbackArgs);
@@ -169,7 +168,7 @@ class TrackFunctions extends Function {
         if (mapUid === undefined) {
             throw new Error('MapUid not given');
         }
-        const trackJSON = await this.trackmaniaWrapper.getTrackInfo(mapUid);
+        const trackJSON = await databaseFacade.trackmaniaDB.getTrack(mapUid);
         return this.trackmaniaView.embedTrackInfo(trackJSON);
     }
 
@@ -180,7 +179,7 @@ class TrackFunctions extends Function {
         if (date < this.START_DATE) {
             throw new Error('Date given is before Trackmania came out, silly :)');
         }
-        const trackJSON = await this.fetchTOTD(date);
+        const trackJSON = await databaseFacade.trackmaniaDB.getTOTD(date);
         return this.trackmaniaView.embedTrackInfo(trackJSON);
     }
 
