@@ -135,21 +135,9 @@ class TrackFunctions extends Function {
     }
     
     buttonGetTrackInfo = async (params, command_queries) => {
-        const groupUid = revertUID(params[1]);
         const mapUid = params[2];
-        const isTOTD = command_queries.length > 1 && command_queries[1] === 'totd';
-        const command = (isTOTD) ? `Track of the Day - ${params[3]}` : 'Map Search';
-        const endTimestamp = (isTOTD) ? Number(convertNumberToBase(command_queries[2], 64, 10)) : 0;
-        let callback = d => d;
-        let callbackArgs = [];
-        if (isTOTD && endTimestamp > Math.floor(Date.now() / 1000)) {
-            callback = this.cachingTOTDProvider.getData;
-        }
-        else {
-            callback = this.trackmaniaWrapper.getTrackInfo(command, mapUid, groupUid);
-        }
 
-        let embeddedTOTD = this.getAndEmbedTrackInfo(callback, callbackArgs);
+        let embeddedTOTD = this.getAndEmbedTrackInfo(databaseFacade.trackmaniaDB.getTrack, [mapUid]);
         return embeddedTOTD;
     }
 
